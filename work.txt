@@ -1,0 +1,65 @@
+Honest answer first: Zoho ships 55+ products across sales, finance, HR, IT, productivity, BI, and developer platforms. What we have is roughly 8 of the most common SaaS modules — comparable to Zoho One's core "CRM + Books + Desk + Projects + Campaigns" bundle, but nowhere near full parity. Trying to "build all of Zoho" in one go is unrealistic; the right move is to identify gaps, then pick the next 1–3 modules to add depth.
+
+What we already have (≈ Zoho equivalent)
+Module	Zoho equivalent	Coverage
+CRM (contacts, companies, leads, activities)	Zoho CRM (lite)	~40%
+Sales pipeline (deals, kanban, stages)	Zoho CRM Deals	~50%
+Invoicing	Zoho Invoice	~50%
+Customers / Products	Zoho Books (subset)	~15%
+Projects + Tasks	Zoho Projects	~35%
+Helpdesk / Tickets	Zoho Desk	~40%
+Public Forms	Zoho Forms	~30%
+Email Campaigns	Zoho Campaigns	~25%
+Analytics dashboards	Zoho Analytics (basic)	~10%
+Subscription billing (Stripe)	Zoho Subscriptions	~50%
+RBAC + audit + multi-tenancy	Zoho Directory (subset)	~50%
+Major missing product categories
+Tier 1 — most-requested SaaS staples
+Inventory / Items / Stock (Zoho Inventory) — purchase orders, stock levels, warehouses
+Books-grade accounting — chart of accounts, journals, bank reconciliation, ledger, P&L, balance sheet (we have invoicing only)
+Expense management (Zoho Expense) — receipts, approvals, mileage, reimbursements
+HR / People (Zoho People) — employees, leaves, attendance, org chart
+Recruit / ATS (Zoho Recruit) — jobs, candidates, pipeline
+E-signature (Zoho Sign) — document signing workflow
+Bookings (Zoho Bookings) — calendar appointments
+Surveys (Zoho Survey) — separate from Forms with logic + reporting
+Live chat / SalesIQ — visitor tracking, chatbot, in-app chat widget
+Bug tracker (Zoho BugTracker) — distinct from Projects
+Tier 2 — collaboration & productivity
+Mail (Zoho Mail) — IMAP/SMTP-backed mailbox UI
+Chat / Cliq — team messaging, DMs, channels
+Meeting / Webinar — video conferencing (probably out-of-scope; integrate Zoom/Daily)
+WorkDrive — file storage with folders, sharing, versions
+Notebook — personal notes
+Writer / Sheet / Show — collaborative docs/spreadsheets/slides (massive scope)
+Connect — internal intranet/social
+Vault — password manager
+Tier 3 — marketing & web
+Marketing Automation — journeys, workflows, lead scoring
+Social — social media scheduling
+Sites — website/landing-page builder
+PageSense — heatmaps + A/B testing
+Backstage — event management
+Tier 4 — BI & developer platform
+Reports / Analytics Plus — pivot tables, custom dashboards, SQL queries, embed
+Creator — low-code app builder
+Flow — iPaaS / workflow automation between apps
+DataPrep — data cleaning
+Catalyst — serverless functions
+Tier 5 — IT & security
+ServiceDesk Plus — ITSM (assets, change mgmt, problems)
+Assist — remote desktop support
+OneAuth / Directory SSO — full IdP with SAML/OIDC issuer
+Recommended order to tackle next
+Realistic, high-value, fits the stack:
+
+Inventory & purchase orders — extends our Books module; ~3–5 days of focused work.
+Expense management — small-scope, finishes the finance triangle (Invoice + Inventory + Expense).
+HR / Employees / Leaves — a popular Zoho One pillar; clean Prisma extension.
+E-signature workflow — high perceived value, mostly UI + status state machine; integrate with our existing PDF generation.
+Bookings — calendar slots + public booking page; reuses public-forms pattern.
+Bug tracker — small fork of Helpdesk + Projects.
+Live chat widget — embeddable script + ticket-creation pipeline; ties to Helpdesk.
+Marketing automation (journeys) — extend Campaigns with a workflow runner.
+Mail (IMAP-backed inbox) — significant scope, requires background workers.
+Reports v2 — pivot/custom dashboards on top of existing analytics.

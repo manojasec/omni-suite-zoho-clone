@@ -1,0 +1,1679 @@
+// OmniSuite — MVP Prisma schema
+// Multi-tenant: every tenant-scoped table includes workspaceId.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------- Identity ----------------
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  name            String?
+  hashedPassword  String?
+  emailVerified   DateTime?
+  image           String?
+  twoFactorSecret String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  memberships     Membership[]
+  notifications   Notification[]
+  ownedContacts   Contact[]      @relation("ContactOwner")
+  ownedDeals      Deal[]         @relation("DealOwner")
+  assignedTickets Ticket[]       @relation("TicketAssignee")
+  assignedTasks   Task[]         @relation("TaskAssignee")
+  activities      Activity[]
+  sessions        Session[]
+  accounts        Account[]
+  hostedBookingTypes BookingType[] @relation("BookingTypeHost")
+  hostedBookings     Booking[]     @relation("BookingHost")
+  reportedIssues     Issue[]        @relation("IssueReporter")
+  assignedIssues     Issue[]        @relation("IssueAssignee")
+  issueComments      IssueComment[]
+  assignedChats      ChatConversation[] @relation("ChatAgent")
+  chatMessages       ChatMessage[]      @relation("ChatMessageAgent")
+  sentMailMessages   MailMessage[]      @relation("MailSender")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------- Workspace / RBAC ----------------
+
+enum Plan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum SystemRole {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+  AGENT
+  SALES
+  FINANCE
+  VIEWER
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+model Workspace {
+  id                   String    @id @default(cuid())
+  name                 String
+  slug                 String    @unique
+  plan                 Plan      @default(FREE)
+  currency             String    @default("USD")
+  timezone             String    @default("UTC")
+  logoUrl              String?
+  accentColor          String?   @default("#0F172A")
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  subscriptionStatus   String? // active, trialing, past_due, canceled, incomplete, etc.
+  currentPeriodEnd     DateTime?
+  trialEndsAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  memberships        Membership[]
+  invitations        Invitation[]
+  contacts           Contact[]
+  companies          Company[]
+  pipelines          Pipeline[]
+  deals              Deal[]
+  customers          Customer[]
+  invoices           Invoice[]
+  products           Product[]
+  projects           Project[]
+  tasks              Task[]
+  tickets            Ticket[]
+  forms              Form[]
+  campaigns          Campaign[]
+  audiences          Audience[]
+  apiKeys            ApiKey[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  activities         Activity[]
+  warehouses         Warehouse[]
+  inventoryItems     InventoryItem[]
+  stockMovements     StockMovement[]
+  suppliers          Supplier[]
+  purchaseOrders     PurchaseOrder[]
+  expenseCategories  ExpenseCategory[]
+  expenses           Expense[]
+  departments        Department[]
+  employees          Employee[]
+  leaveTypes         LeaveType[]
+  leaveRequests      LeaveRequest[]
+  attendance         AttendanceRecord[]
+  signatureEnvelopes SignatureEnvelope[]
+  bookingTypes       BookingType[]
+  bookings           Booking[]
+  issueProjects      IssueProject[]
+  issues             Issue[]
+  issueComments      IssueComment[]
+  chatConversations  ChatConversation[]
+  chatMessages       ChatMessage[]
+  workflows          Workflow[]
+  workflowEnrollments WorkflowEnrollment[]
+  mailThreads        MailThread[]
+  mailMessages       MailMessage[]
+  ledgerAccounts     LedgerAccount[]
+  journalEntries     JournalEntry[]
+  journalLines       JournalLine[]
+  bankAccounts       BankAccount[]
+  bankTransactions   BankTransaction[]
+  jobOpenings        JobOpening[]
+  candidates         Candidate[]
+  applications       Application[]
+  interviews         Interview[]
+}
+
+model Membership {
+  id          String           @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        SystemRole       @default(MEMBER)
+  status      MembershipStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Invitation {
+  id          String     @id @default(cuid())
+  email       String
+  workspaceId String
+  role        SystemRole @default(MEMBER)
+  token       String     @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  hashedKey   String    @unique
+  prefix      String
+  scopes      Json      @default("[]")
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  type        String
+  title       String
+  body        String?
+  href        String?
+  meta        Json?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId, readAt])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  workspaceId String
+  actorId     String?
+  action      String
+  resource    String
+  resourceId  String?
+  diff        Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+// ---------------- CRM ----------------
+
+enum LifecycleStage {
+  LEAD
+  MQL
+  SQL
+  CUSTOMER
+  CHURNED
+}
+
+model Company {
+  id          String     @id @default(cuid())
+  workspaceId String
+  name        String
+  domain      String?
+  industry    String?
+  size        String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts    Contact[]
+  deals       Deal[]
+  customers   Customer[]
+
+  @@index([workspaceId])
+}
+
+model Contact {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  firstName      String
+  lastName       String?
+  email          String?
+  phone          String?
+  title          String?
+  companyId      String?
+  ownerId        String?
+  lifecycleStage LifecycleStage @default(LEAD)
+  source         String?
+  tags           Json           @default("[]")
+  notes          String?        @db.Text
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company        Company?       @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  owner          User?          @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  activities     Activity[]
+  deals          Deal[]
+  tickets        Ticket[]
+
+  @@index([workspaceId, email])
+  @@index([workspaceId, lifecycleStage])
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  MEETING
+  EMAIL
+  TASK
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  workspaceId String
+  type        ActivityType
+  subject     String
+  body        String?      @db.Text
+  contactId   String?
+  dealId      String?
+  authorId    String?
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact     Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  deal        Deal?        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  author      User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, contactId])
+}
+
+// ---------------- Sales ----------------
+
+model Pipeline {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stages      Stage[]
+  deals       Deal[]
+
+  @@index([workspaceId])
+}
+
+model Stage {
+  id          String   @id @default(cuid())
+  pipelineId  String
+  name        String
+  order       Int
+  probability Int      @default(0)
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals       Deal[]
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+model Deal {
+  id              String     @id @default(cuid())
+  workspaceId     String
+  name            String
+  value           Decimal    @default(0) @db.Decimal(14, 2)
+  currency        String     @default("USD")
+  pipelineId      String
+  stageId         String
+  status          DealStatus @default(OPEN)
+  contactId       String?
+  companyId       String?
+  ownerId         String?
+  expectedCloseAt DateTime?
+  wonAt           DateTime?
+  lostReason      String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pipeline        Pipeline   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage           Stage      @relation(fields: [stageId], references: [id])
+  contact         Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  company         Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  owner           User?      @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  activities      Activity[]
+  invoices        Invoice[]
+
+  @@index([workspaceId, stageId])
+}
+
+// ---------------- Billing ----------------
+
+model Customer {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  companyId      String?
+  name           String
+  email          String?
+  billingAddress String?   @db.Text
+  taxId          String?
+  currency       String    @default("USD")
+  createdAt      DateTime  @default(now())
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  invoices       Invoice[]
+
+  @@index([workspaceId])
+}
+
+model Product {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  name          String
+  sku           String?
+  price         Decimal        @default(0) @db.Decimal(14, 2)
+  taxPercent    Decimal        @default(0) @db.Decimal(5, 2)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem?
+
+  @@index([workspaceId])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+model Invoice {
+  id          String            @id @default(cuid())
+  workspaceId String
+  number      String
+  customerId  String
+  dealId      String?
+  projectId   String?
+  status      InvoiceStatus     @default(DRAFT)
+  issueDate   DateTime          @default(now())
+  dueDate     DateTime?
+  currency    String            @default("USD")
+  subtotal    Decimal           @default(0) @db.Decimal(14, 2)
+  tax         Decimal           @default(0) @db.Decimal(14, 2)
+  total       Decimal           @default(0) @db.Decimal(14, 2)
+  balance     Decimal           @default(0) @db.Decimal(14, 2)
+  notes       String?           @db.Text
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer    Customer          @relation(fields: [customerId], references: [id])
+  deal        Deal?             @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  project     Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lineItems   InvoiceLineItem[]
+  payments    Payment[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  qty         Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal @default(0) @db.Decimal(14, 2)
+  taxPercent  Decimal @default(0) @db.Decimal(5, 2)
+  amount      Decimal @default(0) @db.Decimal(14, 2)
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Decimal  @db.Decimal(14, 2)
+  method    String
+  reference String?
+  paidAt    DateTime @default(now())
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// ---------------- Projects ----------------
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model Project {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  name         String
+  description  String?       @db.Text
+  status       ProjectStatus @default(PLANNING)
+  startDate    DateTime?
+  endDate      DateTime?
+  budgetHours  Int?
+  budgetAmount Decimal?      @db.Decimal(14, 2)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks        Task[]
+  invoices     Invoice[]
+
+  @@index([workspaceId, status])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id           String     @id @default(cuid())
+  workspaceId  String
+  projectId    String?
+  parentTaskId String?
+  title        String
+  description  String?    @db.Text
+  status       TaskStatus @default(TODO)
+  priority     Priority   @default(MEDIUM)
+  assigneeId   String?
+  dueAt        DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent       Task?      @relation("TaskParent", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks     Task[]     @relation("TaskParent")
+  assignee     User?      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+}
+
+// ---------------- Helpdesk ----------------
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  ON_HOLD
+  RESOLVED
+  CLOSED
+}
+
+model Ticket {
+  id                 String          @id @default(cuid())
+  workspaceId        String
+  number             Int
+  subject            String
+  description        String?         @db.Text
+  status             TicketStatus    @default(OPEN)
+  priority           Priority        @default(MEDIUM)
+  requesterContactId String?
+  assigneeId         String?
+  channel            String          @default("web")
+  tags               Json            @default("[]")
+  firstResponseAt    DateTime?
+  resolvedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  requester          Contact?        @relation(fields: [requesterContactId], references: [id], onDelete: SetNull)
+  assignee           User?           @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  messages           TicketMessage[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  authorType String // 'agent' | 'contact'
+  authorId   String?
+  body       String   @db.Text
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+// ---------------- Forms ----------------
+
+model Form {
+  id          String           @id @default(cuid())
+  workspaceId String
+  name        String
+  publicId    String           @unique @default(cuid())
+  schema      Json
+  destination String           @default("contact") // contact | lead | ticket | submission
+  isPublished Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  submissions FormSubmission[]
+}
+
+model FormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  payload   Json
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+}
+
+// ---------------- Campaigns ----------------
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+model Audience {
+  id          String     @id @default(cuid())
+  workspaceId String
+  name        String
+  filterDsl   Json
+  createdAt   DateTime   @default(now())
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaigns   Campaign[]
+}
+
+model Campaign {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  audienceId  String?
+  subject     String
+  html        String         @db.Text
+  status      CampaignStatus @default(DRAFT)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  audience    Audience?      @relation(fields: [audienceId], references: [id], onDelete: SetNull)
+}
+
+// ---------------- Inventory ----------------
+
+model Warehouse {
+  id          String              @id @default(cuid())
+  workspaceId String
+  name        String
+  code        String?
+  address     String?             @db.Text
+  isDefault   Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stock       StockLevel[]
+  movements   StockMovement[]
+  poLines     PurchaseOrderLine[]
+
+  @@index([workspaceId])
+}
+
+model InventoryItem {
+  id           String              @id @default(cuid())
+  workspaceId  String
+  productId    String?             @unique
+  name         String
+  sku          String
+  description  String?             @db.Text
+  unit         String              @default("each") // each, kg, lb, m, etc.
+  costPrice    Decimal             @default(0) @db.Decimal(14, 2)
+  salePrice    Decimal             @default(0) @db.Decimal(14, 2)
+  reorderPoint Int                 @default(0)
+  trackStock   Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product      Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  stock        StockLevel[]
+  movements    StockMovement[]
+  poLines      PurchaseOrderLine[]
+
+  @@unique([workspaceId, sku])
+  @@index([workspaceId])
+}
+
+model StockLevel {
+  id          String        @id @default(cuid())
+  itemId      String
+  warehouseId String
+  quantity    Int           @default(0)
+  updatedAt   DateTime      @updatedAt
+  item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, warehouseId])
+  @@index([warehouseId])
+}
+
+enum StockMovementType {
+  RECEIVE // PO receipt or manual stock-in
+  SHIP // Outgoing (sale, fulfillment)
+  ADJUST // Manual correction
+  TRANSFER // Between warehouses
+}
+
+model StockMovement {
+  id          String            @id @default(cuid())
+  workspaceId String
+  itemId      String
+  warehouseId String
+  type        StockMovementType
+  quantity    Int // signed: + adds, - removes
+  reference   String? // PO #, invoice #, etc.
+  note        String?           @db.Text
+  actorId     String?
+  createdAt   DateTime          @default(now())
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  item        InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([itemId])
+}
+
+model Supplier {
+  id             String          @id @default(cuid())
+  workspaceId    String
+  name           String
+  email          String?
+  phone          String?
+  address        String?         @db.Text
+  notes          String?         @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@index([workspaceId])
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  workspaceId  String
+  number       String
+  supplierId   String
+  status       PurchaseOrderStatus @default(DRAFT)
+  orderDate    DateTime            @default(now())
+  expectedDate DateTime?
+  receivedDate DateTime?
+  currency     String              @default("USD")
+  subtotal     Decimal             @default(0) @db.Decimal(14, 2)
+  tax          Decimal             @default(0) @db.Decimal(14, 2)
+  total        Decimal             @default(0) @db.Decimal(14, 2)
+  notes        String?             @db.Text
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  lines        PurchaseOrderLine[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  itemId          String
+  warehouseId     String
+  description     String
+  qtyOrdered      Int           @default(1)
+  qtyReceived     Int           @default(0)
+  unitCost        Decimal       @default(0) @db.Decimal(14, 2)
+  taxPercent      Decimal       @default(0) @db.Decimal(5, 2)
+  amount          Decimal       @default(0) @db.Decimal(14, 2)
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item            InventoryItem @relation(fields: [itemId], references: [id])
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id])
+
+  @@index([purchaseOrderId])
+}
+
+// ===== Expense Management =====
+
+model ExpenseCategory {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  code        String?
+  archived    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  expenses    Expense[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+model Expense {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  submittedById   String
+  approvedById    String?
+  categoryId      String?
+  status          ExpenseStatus    @default(DRAFT)
+  expenseDate     DateTime         @default(now())
+  merchant        String
+  description     String?          @db.Text
+  currency        String           @default("USD")
+  amount          Decimal          @db.Decimal(14, 2)
+  taxAmount       Decimal          @default(0) @db.Decimal(14, 2)
+  reimbursable    Boolean          @default(true)
+  receiptUrl      String?          @db.Text
+  notes           String?          @db.Text
+  rejectionReason String?          @db.Text
+  submittedAt     DateTime?
+  decidedAt       DateTime?
+  reimbursedAt    DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  category        ExpenseCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, submittedById])
+  @@index([workspaceId, expenseDate])
+}
+
+// ===== HR =====
+
+model Department {
+  id          String     @id @default(cuid())
+  workspaceId String
+  name        String
+  managerId   String?
+  archived    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employees   Employee[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+model Employee {
+  id              String             @id @default(cuid())
+  workspaceId     String
+  userId          String?            @unique
+  employeeNumber  String
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  jobTitle        String?
+  departmentId    String?
+  managerId       String?
+  employmentType  EmploymentType     @default(FULL_TIME)
+  status          EmployeeStatus     @default(ACTIVE)
+  hireDate        DateTime
+  terminationDate DateTime?
+  address         String?            @db.Text
+  notes           String?            @db.Text
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  department      Department?        @relation(fields: [departmentId], references: [id])
+  leaveRequests   LeaveRequest[]
+  attendance      AttendanceRecord[]
+
+  @@unique([workspaceId, employeeNumber])
+  @@unique([workspaceId, email])
+  @@index([workspaceId, status])
+  @@index([workspaceId, departmentId])
+}
+
+model LeaveType {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  name          String
+  daysPerYear   Int            @default(0)
+  paid          Boolean        @default(true)
+  archived      Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leaveRequests LeaveRequest[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model LeaveRequest {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  employeeId      String
+  leaveTypeId     String
+  status          LeaveStatus @default(PENDING)
+  startDate       DateTime
+  endDate         DateTime
+  days            Decimal     @default(1) @db.Decimal(5, 2)
+  reason          String?     @db.Text
+  approvedById    String?
+  decidedAt       DateTime?
+  rejectionReason String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employee        Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType       LeaveType   @relation(fields: [leaveTypeId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, employeeId])
+}
+
+model AttendanceRecord {
+  id          String    @id @default(cuid())
+  workspaceId String
+  employeeId  String
+  date        DateTime  @db.Date
+  checkIn     DateTime?
+  checkOut    DateTime?
+  hours       Decimal   @default(0) @db.Decimal(5, 2)
+  note        String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([workspaceId, date])
+}
+
+// ===== E-Signature =====
+
+enum EnvelopeStatus {
+  DRAFT
+  SENT
+  VIEWED
+  COMPLETED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum SignerStatus {
+  PENDING
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+}
+
+model SignatureEnvelope {
+  id          String            @id @default(cuid())
+  workspaceId String
+  createdById String
+  title       String
+  message     String?           @db.Text
+  documentUrl String            @db.Text
+  status      EnvelopeStatus    @default(DRAFT)
+  expiresAt   DateTime?
+  sentAt      DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  declinedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  signers     SignatureSigner[]
+  events      SignatureEvent[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+}
+
+model SignatureSigner {
+  id              String            @id @default(cuid())
+  envelopeId      String
+  name            String
+  email           String
+  order           Int               @default(1)
+  status          SignerStatus      @default(PENDING)
+  accessToken     String            @unique
+  viewedAt        DateTime?
+  signedAt        DateTime?
+  declinedAt      DateTime?
+  declineReason   String?           @db.Text
+  signedIp        String?
+  signedUserAgent String?           @db.Text
+  signatureName   String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  envelope        SignatureEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  events          SignatureEvent[]
+
+  @@index([envelopeId, order])
+  @@index([email])
+}
+
+model SignatureEvent {
+  id         String            @id @default(cuid())
+  envelopeId String
+  signerId   String?
+  type       String
+  ip         String?
+  userAgent  String?           @db.Text
+  detail     String?           @db.Text
+  createdAt  DateTime          @default(now())
+  envelope   SignatureEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  signer     SignatureSigner?  @relation(fields: [signerId], references: [id], onDelete: SetNull)
+
+  @@index([envelopeId, createdAt])
+}
+
+// ---------------- Bookings (Module 5) ----------------
+
+enum BookingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model BookingType {
+  id           String                @id @default(cuid())
+  workspaceId  String
+  hostId       String
+  publicSlug   String                @unique
+  name         String
+  description  String?               @db.Text
+  durationMins Int                   @default(30)
+  bufferMins   Int                   @default(0)
+  color        String                @default("#0F172A")
+  archived     Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  host         User                  @relation("BookingTypeHost", fields: [hostId], references: [id], onDelete: Cascade)
+  availability BookingAvailability[]
+  bookings     Booking[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, archived])
+}
+
+model BookingAvailability {
+  id            String      @id @default(cuid())
+  bookingTypeId String
+  dayOfWeek     Int
+  startMinutes  Int
+  endMinutes    Int
+  bookingType   BookingType @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
+
+  @@index([bookingTypeId, dayOfWeek])
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  workspaceId   String
+  bookingTypeId String
+  hostId        String
+  publicId      String        @unique @default(cuid())
+  attendeeName  String
+  attendeeEmail String
+  attendeePhone String?
+  status        BookingStatus @default(SCHEDULED)
+  startsAt      DateTime
+  endsAt        DateTime
+  location      String?
+  notes         String?       @db.Text
+  cancelledAt   DateTime?
+  cancelReason  String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bookingType   BookingType   @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
+  host          User          @relation("BookingHost", fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, startsAt])
+  @@index([bookingTypeId, status, startsAt])
+  @@index([attendeeEmail])
+}
+
+// ---------------- Bug Tracker (Module 6) ----------------
+
+enum IssueType {
+  BUG
+  FEATURE
+  TASK
+  IMPROVEMENT
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum IssueSeverity {
+  TRIVIAL
+  MINOR
+  MAJOR
+  CRITICAL
+  BLOCKER
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+model IssueProject {
+  id          String    @id @default(cuid())
+  workspaceId String
+  key         String
+  name        String
+  description String?   @db.Text
+  archived    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  issues      Issue[]
+
+  @@unique([workspaceId, key])
+  @@unique([workspaceId, name])
+  @@index([workspaceId, archived])
+}
+
+model Issue {
+  id              String         @id @default(cuid())
+  workspaceId     String
+  projectId       String
+  number          Int
+  title           String
+  description     String?        @db.Text
+  type            IssueType      @default(BUG)
+  priority        IssuePriority  @default(MEDIUM)
+  severity        IssueSeverity  @default(MINOR)
+  status          IssueStatus    @default(OPEN)
+  reporterId      String
+  assigneeId      String?
+  environment     String?
+  stepsToReproduce String?       @db.Text
+  expected        String?        @db.Text
+  actual          String?        @db.Text
+  version         String?
+  dueDate         DateTime?
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  tags            String? // comma-separated, MVP only
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         IssueProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reporter        User           @relation("IssueReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  assignee        User?          @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  comments        IssueComment[]
+
+  @@unique([projectId, number])
+  @@index([workspaceId, status])
+  @@index([workspaceId, assigneeId])
+  @@index([projectId, status, priority])
+}
+
+model IssueComment {
+  id          String    @id @default(cuid())
+  workspaceId String
+  issueId     String
+  authorId    String
+  body        String    @db.Text
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  issue       Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+}
+
+// ---------------- Live Chat ----------------
+
+enum ChatStatus {
+  OPEN
+  ASSIGNED
+  RESOLVED
+  CLOSED
+}
+
+enum ChatSender {
+  VISITOR
+  AGENT
+  SYSTEM
+}
+
+model ChatConversation {
+  id          String     @id @default(cuid())
+  workspaceId String
+  publicId    String     @unique @default(cuid())
+  visitorName String?
+  visitorEmail String?
+  pageUrl     String?
+  userAgent   String?    @db.Text
+  status      ChatStatus @default(OPEN)
+  agentId     String?
+  lastMessageAt DateTime @default(now())
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       User?      @relation("ChatAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  messages    ChatMessage[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, lastMessageAt])
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  sender         ChatSender
+  agentId        String?
+  body           String           @db.Text
+  createdAt      DateTime         @default(now())
+
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent          User?            @relation("ChatMessageAgent", fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+// ---------------- Marketing Automation ----------------
+
+enum WorkflowTrigger {
+  MANUAL
+  CONTACT_CREATED
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+}
+
+enum WorkflowStepType {
+  WAIT_DAYS
+  SEND_EMAIL
+  ADD_TAG
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  EXITED
+}
+
+model Workflow {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?        @db.Text
+  trigger     WorkflowTrigger @default(MANUAL)
+  status      WorkflowStatus  @default(DRAFT)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  steps       WorkflowStep[]
+  enrollments WorkflowEnrollment[]
+
+  @@index([workspaceId, status])
+}
+
+model WorkflowStep {
+  id          String           @id @default(cuid())
+  workflowId  String
+  order       Int
+  type        WorkflowStepType
+  waitDays    Int?
+  emailSubject String?
+  emailHtml   String?          @db.Text
+  tag         String?
+
+  workflow    Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, order])
+}
+
+model WorkflowEnrollment {
+  id           String           @id @default(cuid())
+  workspaceId  String
+  workflowId   String
+  contactId    String
+  currentStep  Int              @default(0)
+  status       EnrollmentStatus @default(ACTIVE)
+  nextRunAt    DateTime         @default(now())
+  startedAt    DateTime         @default(now())
+  completedAt  DateTime?
+  lastError    String?          @db.Text
+
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow     Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, contactId])
+  @@index([workspaceId, status, nextRunAt])
+}
+
+// ---------------- Mail ----------------
+
+enum MailFolder {
+  INBOX
+  SENT
+  DRAFTS
+  ARCHIVE
+  TRASH
+}
+
+enum MailDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model MailThread {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  subject       String
+  snippet       String     @default("")
+  participants  Json       @default("[]")
+  folder        MailFolder @default(INBOX)
+  isUnread      Boolean    @default(true)
+  isStarred     Boolean    @default(false)
+  lastMessageAt DateTime   @default(now())
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages      MailMessage[]
+
+  @@index([workspaceId, folder, lastMessageAt])
+}
+
+model MailMessage {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  threadId     String
+  direction    MailDirection
+  fromAddress  String
+  fromName     String?
+  toAddresses  Json          @default("[]")
+  ccAddresses  Json          @default("[]")
+  bccAddresses Json          @default("[]")
+  subject      String
+  body         String        @db.Text
+  sentByUserId String?
+  createdAt    DateTime      @default(now())
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  thread       MailThread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sentBy       User?         @relation("MailSender", fields: [sentByUserId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+}
+
+
+// ---------------- Books / Accounting ----------------
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  VOID
+}
+
+enum BankTransactionStatus {
+  UNRECONCILED
+  RECONCILED
+}
+
+model LedgerAccount {
+  id          String            @id @default(cuid())
+  workspaceId String
+  code        String
+  name        String
+  type        LedgerAccountType
+  parentId    String?
+  archived    Boolean           @default(false)
+  description String?           @db.Text
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent      LedgerAccount?    @relation("LedgerAccountParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children    LedgerAccount[]   @relation("LedgerAccountParent")
+  lines       JournalLine[]
+  bankAccount BankAccount?
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, type, archived])
+}
+
+model JournalEntry {
+  id          String             @id @default(cuid())
+  workspaceId String
+  reference   String
+  date        DateTime           @db.Date
+  memo        String?            @db.Text
+  status      JournalEntryStatus @default(DRAFT)
+  postedAt    DateTime?
+  createdById String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lines       JournalLine[]
+
+  @@unique([workspaceId, reference])
+  @@index([workspaceId, status, date])
+}
+
+model JournalLine {
+  id          String        @id @default(cuid())
+  workspaceId String
+  entryId     String
+  accountId   String
+  debit       Decimal       @default(0) @db.Decimal(14, 2)
+  credit      Decimal       @default(0) @db.Decimal(14, 2)
+  description String?       @db.Text
+  position    Int           @default(0)
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  entry       JournalEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account     LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([entryId, position])
+  @@index([accountId])
+}
+
+model BankAccount {
+  id          String        @id @default(cuid())
+  workspaceId String
+  ledgerAccountId String    @unique
+  name        String
+  bankName    String?
+  accountNumberLast4 String?
+  currency    String        @default("USD")
+  archived    Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ledgerAccount LedgerAccount  @relation(fields: [ledgerAccountId], references: [id], onDelete: Cascade)
+  transactions  BankTransaction[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, archived])
+}
+
+model BankTransaction {
+  id            String                @id @default(cuid())
+  workspaceId   String
+  bankAccountId String
+  date          DateTime              @db.Date
+  description   String
+  amount        Decimal               @db.Decimal(14, 2) // signed: + deposit, - withdrawal
+  reference     String?
+  status        BankTransactionStatus @default(UNRECONCILED)
+  reconciledAt  DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@index([bankAccountId, date])
+  @@index([workspaceId, status])
+}
+
+
+// ---------------- Recruit (ATS) ----------------
+
+enum JobOpeningStatus {
+  DRAFT
+  OPEN
+  ON_HOLD
+  CLOSED
+}
+
+enum JobEmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  TEMPORARY
+}
+
+enum CandidateStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ApplicationStage {
+  APPLIED
+  SCREEN
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum InterviewKind {
+  PHONE
+  VIDEO
+  ONSITE
+  TECHNICAL
+  PANEL
+}
+
+enum InterviewOutcome {
+  PENDING
+  PASS
+  FAIL
+  NO_SHOW
+}
+
+model JobOpening {
+  id           String             @id @default(cuid())
+  workspaceId  String
+  title        String
+  department   String?
+  location     String?
+  remote       Boolean            @default(false)
+  employment   JobEmploymentType  @default(FULL_TIME)
+  status       JobOpeningStatus   @default(DRAFT)
+  description  String?            @db.Text
+  salaryMin    Decimal?           @db.Decimal(14, 2)
+  salaryMax    Decimal?           @db.Decimal(14, 2)
+  currency     String             @default("USD")
+  openings     Int                @default(1)
+  publishedAt  DateTime?
+  closedAt     DateTime?
+  createdById  String
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([workspaceId, status])
+}
+
+model Candidate {
+  id           String           @id @default(cuid())
+  workspaceId  String
+  firstName    String
+  lastName     String
+  email        String
+  phone        String?
+  headline     String?
+  location     String?
+  linkedinUrl  String?
+  resumeUrl    String?
+  source       String?
+  status       CandidateStatus  @default(ACTIVE)
+  notes        String?          @db.Text
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId, status])
+}
+
+model Application {
+  id           String            @id @default(cuid())
+  workspaceId  String
+  jobId        String
+  candidateId  String
+  stage        ApplicationStage  @default(APPLIED)
+  rating       Int?              // 1-5
+  notes        String?           @db.Text
+  rejectedReason String?
+  appliedAt    DateTime          @default(now())
+  decidedAt    DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  job          JobOpening        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate    Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  interviews   Interview[]
+
+  @@unique([jobId, candidateId])
+  @@index([workspaceId, stage])
+}
+
+model Interview {
+  id            String            @id @default(cuid())
+  workspaceId   String
+  applicationId String
+  kind          InterviewKind     @default(VIDEO)
+  scheduledAt   DateTime
+  durationMins  Int               @default(45)
+  location      String?
+  interviewer   String?
+  outcome       InterviewOutcome  @default(PENDING)
+  feedback      String?           @db.Text
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, scheduledAt])
+}
