@@ -224,6 +224,11 @@ model Workspace {
   heatmapSites       HeatmapSite[]
   flows              Flow[]
   flowRuns           FlowRun[]
+  creatorApps        CreatorApp[]
+  creatorRecords     CreatorRecord[]
+  writerFolders      WriterFolder[]
+  writerDocs         WriterDoc[]
+  sheets             Sheet[]
 }
 
 model Membership {
@@ -3202,3 +3207,195 @@ model FlowRunStep {
   @@index([runId, status])
 }
 
+// ---------------- AppCreator (low-code) ----------------
+
+enum CreatorAppStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CreatorFieldKind {
+  TEXT
+  TEXTAREA
+  NUMBER
+  DATE
+  BOOLEAN
+  SELECT
+  EMAIL
+  URL
+}
+
+model CreatorApp {
+  id          String           @id @default(cuid())
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String           @db.VarChar(160)
+  slug        String           @db.VarChar(80)
+  description String?          @db.VarChar(500)
+  icon        String?          @db.VarChar(40)
+  status      CreatorAppStatus @default(DRAFT)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  entities    CreatorEntity[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status])
+}
+
+model CreatorEntity {
+  id          String          @id @default(cuid())
+  appId       String
+  app         CreatorApp      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  key         String          @db.VarChar(64)
+  label       String          @db.VarChar(160)
+  description String?         @db.VarChar(500)
+  position    Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  fields      CreatorField[]
+  records     CreatorRecord[]
+
+  @@unique([appId, key])
+  @@index([appId])
+}
+
+model CreatorField {
+  id        String           @id @default(cuid())
+  entityId  String
+  entity    CreatorEntity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  key       String           @db.VarChar(64)
+  label     String           @db.VarChar(160)
+  kind      CreatorFieldKind
+  required  Boolean          @default(false)
+  helpText  String?          @db.VarChar(300)
+  options   Json?
+  position  Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([entityId, key])
+  @@index([entityId])
+}
+
+model CreatorRecord {
+  id          String        @id @default(cuid())
+  entityId    String
+  entity      CreatorEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  data        Json
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([entityId, createdAt])
+  @@index([workspaceId])
+}
+
+
+// ---------------- Writer (collaborative docs) ----------------
+
+enum WriterDocStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WriterDocVisibility {
+  PRIVATE
+  WORKSPACE
+  PUBLIC
+}
+
+model WriterFolder {
+  id          String         @id @default(cuid())
+  workspaceId String
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      WriterFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    WriterFolder[] @relation("FolderTree")
+  name        String         @db.VarChar(160)
+  position    Int            @default(0)
+  docs        WriterDoc[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([workspaceId, parentId])
+}
+
+model WriterDoc {
+  id          String              @id @default(cuid())
+  workspaceId String
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folderId    String?
+  folder      WriterFolder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  title       String              @db.VarChar(200)
+  content     String              @db.LongText
+  status      WriterDocStatus     @default(DRAFT)
+  visibility  WriterDocVisibility @default(WORKSPACE)
+  authorId    String?
+  wordCount   Int                 @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  versions    WriterDocVersion[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, folderId])
+}
+
+model WriterDocVersion {
+  id        String    @id @default(cuid())
+  docId     String
+  doc       WriterDoc @relation(fields: [docId], references: [id], onDelete: Cascade)
+  version   Int
+  title     String    @db.VarChar(200)
+  content   String    @db.LongText
+  authorId  String?
+  createdAt DateTime  @default(now())
+
+  @@unique([docId, version])
+  @@index([docId])
+}
+
+
+// ---------------- Sheet (lightweight spreadsheet) ----------------
+
+enum SheetStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model Sheet {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String      @db.VarChar(160)
+  description String?     @db.VarChar(500)
+  status      SheetStatus @default(ACTIVE)
+  rowCount    Int         @default(50)
+  colCount    Int         @default(10)
+  ownerId     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cells       SheetCell[]
+
+  @@index([workspaceId, status])
+}
+
+model SheetCell {
+  id        String   @id @default(cuid())
+  sheetId   String
+  row       Int
+  col       Int
+  value     String?  @db.Text
+  formula   String?  @db.VarChar(500)
+  updatedAt DateTime @updatedAt
+  sheet     Sheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+
+  @@unique([sheetId, row, col])
+  @@index([sheetId])
+}

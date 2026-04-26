@@ -34,8 +34,10 @@ import {
   LogIn,
   MousePointerClick,
   Video,
-  Workflow,
   Activity,
+  Boxes,
+  NotebookPen,
+  Table2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -205,6 +207,9 @@ const groups: Group[] = [
     items: [
       { href: "/app/flows", label: "Command Center", icon: Workflow },
       { href: "/app/flows/runs", label: "Flow runs", icon: Activity },
+      { href: "/app/creator", label: "App Creator", icon: Boxes },
+      { href: "/app/writer", label: "Writer", icon: NotebookPen },
+      { href: "/app/sheet", label: "Sheet", icon: Table2 },
     ],
   },
   {
