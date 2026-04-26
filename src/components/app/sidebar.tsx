@@ -38,6 +38,10 @@ import {
   Boxes,
   NotebookPen,
   Table2,
+  Presentation,
+  Library,
+  GanttChart,
+  Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -127,6 +131,7 @@ const groups: Group[] = [
       { href: "/app/recruit/candidates", label: "Candidates", icon: UserCircle },
       { href: "/app/recruit/pipeline", label: "Pipeline", icon: Workflow },
       { href: "/app/recruit/interviews", label: "Interviews", icon: Calendar },
+      { href: "/app/careers", label: "Career Site", icon: Globe },
     ],
   },
   {
@@ -166,6 +171,8 @@ const groups: Group[] = [
     label: "Work",
     items: [
       { href: "/app/projects", label: "Projects", icon: FolderKanban },
+      { href: "/app/gantt", label: "Gantt", icon: GanttChart },
+      { href: "/app/timesheets", label: "Timesheets", icon: Timer },
       { href: "/app/tasks", label: "My tasks", icon: CheckSquare },
     ],
   },
@@ -210,6 +217,8 @@ const groups: Group[] = [
       { href: "/app/creator", label: "App Creator", icon: Boxes },
       { href: "/app/writer", label: "Writer", icon: NotebookPen },
       { href: "/app/sheet", label: "Sheet", icon: Table2 },
+      { href: "/app/slides", label: "Slides", icon: Presentation },
+      { href: "/app/help", label: "Help Center", icon: Library },
     ],
   },
   {
