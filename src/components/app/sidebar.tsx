@@ -32,6 +32,10 @@ import {
   UsersRound,
   ShieldCheck,
   LogIn,
+  MousePointerClick,
+  Video,
+  Workflow,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +191,20 @@ const groups: Group[] = [
     items: [
       { href: "/app/sso", label: "Single sign-on", icon: ShieldCheck },
       { href: "/app/sso/events", label: "Login events", icon: LogIn },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [
+      { href: "/app/heatmaps", label: "Heatmaps", icon: MousePointerClick },
+      { href: "/app/heatmaps/recordings", label: "Recordings", icon: Video },
+    ],
+  },
+  {
+    label: "Automation",
+    items: [
+      { href: "/app/flows", label: "Command Center", icon: Workflow },
+      { href: "/app/flows/runs", label: "Flow runs", icon: Activity },
     ],
   },
   {

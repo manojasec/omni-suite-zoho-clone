@@ -221,6 +221,9 @@ model Workspace {
   orders             StoreOrder[]
   ssoProviders       SsoProvider[]
   ssoLoginEvents     SsoLoginEvent[]
+  heatmapSites       HeatmapSite[]
+  flows              Flow[]
+  flowRuns           FlowRun[]
 }
 
 model Membership {
@@ -2957,3 +2960,245 @@ model SsoLoginEvent {
   @@index([workspaceId, occurredAt])
   @@index([providerId, occurredAt])
 }
+
+// ---------------- Heatmaps / Session recordings ----------------
+
+enum HeatmapSiteStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum HeatmapEventKind {
+  CLICK
+  MOVE
+  SCROLL
+}
+
+enum SessionRecordingStatus {
+  RECORDING
+  COMPLETED
+  ARCHIVED
+}
+
+model HeatmapSite {
+  id          String              @id @default(cuid())
+  workspaceId String
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String              @db.VarChar(160)
+  domain      String              @db.VarChar(160)
+  trackerKey  String              @unique @db.VarChar(40)
+  status      HeatmapSiteStatus   @default(ACTIVE)
+  sampleRate  Int                 @default(100)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  pages       HeatmapPage[]
+  events      HeatmapEvent[]
+  recordings  SessionRecording[]
+
+  @@unique([workspaceId, domain])
+  @@index([workspaceId, status])
+}
+
+model HeatmapPage {
+  id          String         @id @default(cuid())
+  siteId      String
+  site        HeatmapSite    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  path        String         @db.VarChar(400)
+  label       String?        @db.VarChar(160)
+  viewCount   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  events      HeatmapEvent[]
+
+  @@unique([siteId, path])
+  @@index([siteId])
+}
+
+model HeatmapEvent {
+  id         String           @id @default(cuid())
+  siteId     String
+  site       HeatmapSite      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pageId     String
+  page       HeatmapPage      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  kind       HeatmapEventKind
+  xPercent   Decimal          @db.Decimal(6, 3)
+  yPercent   Decimal          @db.Decimal(6, 3)
+  viewport   Int?
+  selector   String?          @db.VarChar(400)
+  occurredAt DateTime         @default(now())
+
+  @@index([pageId, kind])
+  @@index([siteId, occurredAt])
+}
+
+model SessionRecording {
+  id           String                 @id @default(cuid())
+  siteId       String
+  site         HeatmapSite            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitorId    String                 @db.VarChar(64)
+  status       SessionRecordingStatus @default(RECORDING)
+  startedAt    DateTime               @default(now())
+  endedAt      DateTime?
+  durationMs   Int                    @default(0)
+  pageCount    Int                    @default(0)
+  eventCount   Int                    @default(0)
+  startUrl     String                 @db.VarChar(600)
+  userAgent    String?                @db.VarChar(400)
+  ipAddress    String?                @db.VarChar(64)
+  events       SessionEvent[]
+
+  @@index([siteId, startedAt])
+  @@index([siteId, status])
+}
+
+model SessionEvent {
+  id           String           @id @default(cuid())
+  recordingId  String
+  recording    SessionRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  offsetMs     Int
+  kind         String           @db.VarChar(40)
+  payload      Json?
+  occurredAt   DateTime         @default(now())
+
+  @@index([recordingId, offsetMs])
+}
+
+// ---------------- Command Center (Flows) ----------------
+
+enum FlowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum FlowTrigger {
+  MANUAL
+  WEBHOOK
+  SCHEDULE
+}
+
+enum FlowNodeKind {
+  START
+  TASK
+  CONDITION
+  APPROVAL
+  WEBHOOK_CALL
+  DELAY
+  END
+}
+
+enum FlowRunStatus {
+  PENDING
+  RUNNING
+  AWAITING_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+enum FlowStepStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum FlowApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Flow {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String      @db.VarChar(160)
+  description String?     @db.VarChar(500)
+  status      FlowStatus  @default(DRAFT)
+  trigger     FlowTrigger @default(MANUAL)
+  version     Int         @default(1)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nodes       FlowNode[]
+  edges       FlowEdge[]
+  runs        FlowRun[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status])
+}
+
+model FlowNode {
+  id         String       @id @default(cuid())
+  flowId     String
+  key        String       @db.VarChar(64)
+  kind       FlowNodeKind
+  label      String       @db.VarChar(160)
+  config     Json?
+  posX       Int          @default(0)
+  posY       Int          @default(0)
+
+  flow       Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@unique([flowId, key])
+  @@index([flowId])
+}
+
+model FlowEdge {
+  id      String  @id @default(cuid())
+  flowId  String
+  fromKey String  @db.VarChar(64)
+  toKey   String  @db.VarChar(64)
+  branch  String? @db.VarChar(40)
+
+  flow    Flow    @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@index([flowId])
+  @@index([flowId, fromKey])
+}
+
+model FlowRun {
+  id             String        @id @default(cuid())
+  flowId         String
+  workspaceId    String
+  status         FlowRunStatus @default(PENDING)
+  currentNodeKey String?       @db.VarChar(64)
+  triggeredById  String?
+  input          Json?
+  output         Json?
+  error          String?       @db.VarChar(600)
+  startedAt      DateTime      @default(now())
+  finishedAt     DateTime?
+
+  flow           Flow          @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  steps          FlowRunStep[]
+
+  @@index([workspaceId, status])
+  @@index([flowId, startedAt])
+}
+
+model FlowRunStep {
+  id               String                @id @default(cuid())
+  runId            String
+  nodeKey          String                @db.VarChar(64)
+  kind             FlowNodeKind
+  status           FlowStepStatus        @default(PENDING)
+  approvalDecision FlowApprovalDecision?
+  approverId       String?
+  decidedAt        DateTime?
+  comment          String?               @db.VarChar(500)
+  output           Json?
+  note             String?               @db.VarChar(500)
+  startedAt        DateTime              @default(now())
+  finishedAt       DateTime?
+
+  run              FlowRun               @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, startedAt])
+  @@index([runId, status])
+}
+
