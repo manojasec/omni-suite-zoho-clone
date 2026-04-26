@@ -39,6 +39,25 @@ model User {
   assignedChats      ChatConversation[] @relation("ChatAgent")
   chatMessages       ChatMessage[]      @relation("ChatMessageAgent")
   sentMailMessages   MailMessage[]      @relation("MailSender")
+  dashboards         Dashboard[]
+  surveys            Survey[]
+  pivotReports       PivotReport[]
+  notebooks          Notebook[]
+  notes              Note[]
+  vaultFolders       VaultFolder[]
+  vaultItems         VaultItem[]
+  vaultAccessLogs    VaultAccessLog[]
+  events             Event[]
+  teamChannels       TeamChannel[]      @relation("TeamChannelCreator")
+  teamChannelMemberships TeamChannelMember[] @relation("TeamChannelMember")
+  teamMessages       TeamMessage[]      @relation("TeamMessageAuthor")
+  sites              Site[]             @relation("SiteCreator")
+  sitePages          SitePage[]         @relation("SitePageEditor")
+  socialAccounts     SocialAccount[]    @relation("SocialAccountConnector")
+  socialPosts        SocialPost[]       @relation("SocialPostAuthor")
+  connectPosts       ConnectPost[]      @relation("ConnectPostAuthor")
+  connectComments    ConnectComment[]   @relation("ConnectCommentAuthor")
+  connectLikes       ConnectLike[]      @relation("ConnectLikeUser")
 }
 
 model Account {
@@ -170,6 +189,38 @@ model Workspace {
   candidates         Candidate[]
   applications       Application[]
   interviews         Interview[]
+  folders            Folder[]
+  fileAssets         FileAsset[]
+  subscriptionPlans  SubscriptionPlan[]
+  subscriptions      Subscription[]
+  subscriptionInvoices SubscriptionInvoice[]
+  dashboards         Dashboard[]
+  surveys            Survey[]
+  pivotReports       PivotReport[]
+  notebooks          Notebook[]
+  notes              Note[]
+  vaultFolders       VaultFolder[]
+  vaultItems         VaultItem[]
+  events             Event[]
+  teamChannels       TeamChannel[]
+  sites              Site[]
+  socialAccounts     SocialAccount[]
+  socialPosts        SocialPost[]
+  connectGroups      ConnectGroup[]
+  connectPosts       ConnectPost[]
+  leadScoreRules     LeadScoreRule[]
+  leadScoreEvents    LeadScoreEvent[]
+  experiments        Experiment[]
+  courses            Course[]
+  payRuns            PayRun[]
+  assets             Asset[]
+  changes            Change[]
+  problems           Problem[]
+  storefronts        Storefront[]
+  storeCustomers     StoreCustomer[]
+  orders             StoreOrder[]
+  ssoProviders       SsoProvider[]
+  ssoLoginEvents     SsoLoginEvent[]
 }
 
 model Membership {
@@ -294,6 +345,7 @@ model Contact {
   activities     Activity[]
   deals          Deal[]
   tickets        Ticket[]
+  leadScoreEvents LeadScoreEvent[]
 
   @@index([workspaceId, email])
   @@index([workspaceId, lifecycleStage])
@@ -415,6 +467,7 @@ model Product {
   taxPercent    Decimal        @default(0) @db.Decimal(5, 2)
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   inventoryItem InventoryItem?
+  orderItems    StoreOrderItem[]
 
   @@index([workspaceId])
 }
@@ -908,6 +961,8 @@ model Employee {
   department      Department?        @relation(fields: [departmentId], references: [id])
   leaveRequests   LeaveRequest[]
   attendance      AttendanceRecord[]
+  paySlips        PaySlip[]
+  assignedAssets  Asset[]            @relation("AssetAssignee")
 
   @@unique([workspaceId, employeeNumber])
   @@unique([workspaceId, email])
@@ -1676,4 +1731,1229 @@ model Interview {
   application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, scheduledAt])
+}
+
+// ===== Module 13: Files / WorkDrive =====
+
+model Folder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      Folder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Folder[] @relation("FolderChildren")
+  name        String   @db.VarChar(160)
+  description String?  @db.VarChar(500)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  files       FileAsset[]
+
+  @@index([workspaceId, parentId])
+  @@index([workspaceId, name])
+}
+
+model FileAsset {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folderId    String?
+  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name        String   @db.VarChar(260)
+  mimeType    String   @db.VarChar(120)
+  sizeBytes   BigInt   @default(0)
+  storageKey  String   @db.VarChar(500)
+  sha256      String?  @db.VarChar(64)
+  description String?  @db.VarChar(500)
+  starred     Boolean  @default(false)
+  trashedAt   DateTime?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, folderId])
+  @@index([workspaceId, trashedAt])
+  @@index([workspaceId, name])
+}
+
+// ===== Module 14: Subscriptions (recurring billing) =====
+
+enum BillingInterval {
+  WEEK
+  MONTH
+  QUARTER
+  YEAR
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELED
+  EXPIRED
+}
+
+enum SubscriptionInvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+model SubscriptionPlan {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name           String   @db.VarChar(120)
+  code           String   @db.VarChar(60)
+  description    String?  @db.Text
+  amount         Decimal  @db.Decimal(14, 2)
+  currency       String   @db.Char(3)
+  interval       BillingInterval @default(MONTH)
+  intervalCount  Int      @default(1)
+  trialDays      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  subscriptions  Subscription[]
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, active])
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  customerName    String   @db.VarChar(160)
+  customerEmail   String   @db.VarChar(160)
+  status          SubscriptionStatus @default(TRIALING)
+  quantity        Int      @default(1)
+  startedAt       DateTime
+  trialEndsAt     DateTime?
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  canceledAt      DateTime?
+  cancelAtPeriodEnd  Boolean @default(false)
+  notes           String?  @db.Text
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  invoices        SubscriptionInvoice[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, currentPeriodEnd])
+  @@index([planId])
+}
+
+model SubscriptionInvoice {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  number         String   @db.VarChar(40)
+  status         SubscriptionInvoiceStatus @default(DRAFT)
+  amount         Decimal  @db.Decimal(14, 2)
+  currency       String   @db.Char(3)
+  periodStart    DateTime
+  periodEnd      DateTime
+  issuedAt       DateTime @default(now())
+  paidAt         DateTime?
+  dueAt          DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+  @@index([subscriptionId])
+}
+
+enum WidgetKind {
+  KPI
+  BAR
+  LINE
+  PIE
+  TABLE
+}
+
+enum WidgetSource {
+  DEAL
+  INVOICE
+  CONTACT
+  TICKET
+  TASK
+  PROJECT
+  EXPENSE
+  SUBSCRIPTION
+  SUBSCRIPTION_INVOICE
+  CAMPAIGN
+}
+
+enum WidgetMetric {
+  COUNT
+  SUM
+  AVG
+}
+
+model Dashboard {
+  id          String            @id @default(cuid())
+  workspaceId String
+  name        String            @db.VarChar(160)
+  description String?           @db.VarChar(500)
+  createdById String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation(fields: [createdById], references: [id])
+  widgets     DashboardWidget[]
+
+  @@index([workspaceId])
+}
+
+model DashboardWidget {
+  id          String       @id @default(cuid())
+  dashboardId String
+  title       String       @db.VarChar(160)
+  kind        WidgetKind   @default(KPI)
+  source      WidgetSource
+  metric      WidgetMetric @default(COUNT)
+  metricField String?      @db.VarChar(60)
+  groupBy     String?      @db.VarChar(60)
+  rangeDays   Int          @default(30)
+  position    Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  dashboard   Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([dashboardId, position])
+}
+
+enum SurveyStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum SurveyQuestionType {
+  SHORT_TEXT
+  LONG_TEXT
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  RATING
+  NUMBER
+  EMAIL
+}
+
+model Survey {
+  id            String           @id @default(cuid())
+  workspaceId   String
+  title         String           @db.VarChar(160)
+  description   String?          @db.VarChar(1000)
+  publicSlug    String           @unique @default(cuid())
+  status        SurveyStatus     @default(DRAFT)
+  thankYouText  String?          @db.VarChar(500)
+  closesAt      DateTime?
+  createdById   String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy     User             @relation(fields: [createdById], references: [id])
+  questions     SurveyQuestion[]
+  responses     SurveyResponse[]
+
+  @@index([workspaceId, status])
+}
+
+model SurveyQuestion {
+  id         String              @id @default(cuid())
+  surveyId   String
+  position   Int                 @default(0)
+  type       SurveyQuestionType  @default(SHORT_TEXT)
+  prompt     String              @db.VarChar(500)
+  helpText   String?             @db.VarChar(500)
+  required   Boolean             @default(false)
+  options    Json                @default("[]")
+  ratingMax  Int                 @default(5)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  survey     Survey              @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers    SurveyAnswer[]
+
+  @@index([surveyId, position])
+}
+
+model SurveyResponse {
+  id          String         @id @default(cuid())
+  surveyId    String
+  respondent  String?        @db.VarChar(160)
+  ip          String?        @db.VarChar(64)
+  userAgent   String?        @db.VarChar(500)
+  submittedAt DateTime       @default(now())
+  survey      Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers     SurveyAnswer[]
+
+  @@index([surveyId, submittedAt])
+}
+
+model SurveyAnswer {
+  id          String         @id @default(cuid())
+  responseId  String
+  questionId  String
+  text        String?        @db.Text
+  number      Float?
+  choices     Json           @default("[]")
+  createdAt   DateTime       @default(now())
+  response    SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question    SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([responseId])
+}
+
+model PivotReport {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String       @db.VarChar(160)
+  description  String?      @db.VarChar(500)
+  source       WidgetSource
+  rowField     String       @db.VarChar(60)
+  colField     String?      @db.VarChar(60)
+  valueMetric  WidgetMetric @default(COUNT)
+  valueField   String?      @db.VarChar(60)
+  rangeDays    Int          @default(30)
+  createdById  String
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([workspaceId])
+}
+
+// ---------------- Notes (Notebook) ----------------
+
+model Notebook {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(160)
+  color       String   @db.VarChar(16) @default("slate")
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  notes       Note[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model Note {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  notebookId  String?
+  notebook    Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+  title       String    @db.VarChar(200)
+  content     String    @db.Text
+  pinned      Boolean   @default(false)
+  archived    Boolean   @default(false)
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, archived, pinned, updatedAt])
+  @@index([notebookId])
+}
+
+// ---------------- Vault (password manager) ----------------
+
+enum VaultItemType {
+  LOGIN
+  NOTE
+  CARD
+}
+
+model VaultFolder {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String       @db.VarChar(160)
+  createdById String
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  items       VaultItem[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model VaultItem {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folderId    String?
+  folder      VaultFolder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  type        VaultItemType @default(LOGIN)
+  name        String        @db.VarChar(200)
+  username    String?       @db.VarChar(200)
+  url         String?       @db.VarChar(500)
+  notes       String?       @db.VarChar(1000)
+  secretCipher String       @db.Text
+  secretIv    String        @db.VarChar(64)
+  secretTag   String        @db.VarChar(64)
+  favorite    Boolean       @default(false)
+  createdById String
+  createdBy   User          @relation(fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  accesses    VaultAccessLog[]
+
+  @@index([workspaceId, folderId, favorite])
+}
+
+model VaultAccessLog {
+  id        String    @id @default(cuid())
+  itemId    String
+  item      VaultItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  action    String    @db.VarChar(32) // view | reveal | copy | edit
+  at        DateTime  @default(now())
+
+  @@index([itemId, at])
+  @@index([userId, at])
+}
+
+// ---------------- Events / Backstage ----------------
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum EventRegistrationStatus {
+  REGISTERED
+  CONFIRMED
+  ATTENDED
+  CANCELLED
+  WAITLISTED
+}
+
+model Event {
+  id            String       @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug          String       @db.VarChar(120)
+  title         String       @db.VarChar(200)
+  summary       String?      @db.VarChar(500)
+  description   String?      @db.Text
+  location      String?      @db.VarChar(300)
+  isVirtual     Boolean      @default(false)
+  meetingUrl    String?      @db.VarChar(500)
+  status        EventStatus  @default(DRAFT)
+  startsAt      DateTime
+  endsAt        DateTime
+  capacity      Int?
+  coverImageUrl String?      @db.VarChar(500)
+  createdById   String
+  createdBy     User         @relation(fields: [createdById], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  sessions      EventSession[]
+  registrations EventRegistration[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status, startsAt])
+}
+
+model EventSession {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title     String   @db.VarChar(200)
+  speaker   String?  @db.VarChar(160)
+  location  String?  @db.VarChar(200)
+  startsAt  DateTime
+  endsAt    DateTime
+  notes     String?  @db.VarChar(1000)
+  createdAt DateTime @default(now())
+
+  @@index([eventId, startsAt])
+}
+
+model EventRegistration {
+  id           String                  @id @default(cuid())
+  eventId      String
+  event        Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name         String                  @db.VarChar(160)
+  email        String                  @db.VarChar(200)
+  phone        String?                 @db.VarChar(40)
+  company      String?                 @db.VarChar(200)
+  status       EventRegistrationStatus @default(REGISTERED)
+  ticketCode   String                  @unique @db.VarChar(40)
+  notes        String?                 @db.VarChar(500)
+  registeredAt DateTime                @default(now())
+  checkedInAt  DateTime?
+
+  @@unique([eventId, email])
+  @@index([eventId, status])
+}
+
+// ---------------- Cliq / Team Channels ----------------
+
+enum TeamChannelKind {
+  PUBLIC
+  PRIVATE
+  DIRECT
+}
+
+model TeamChannel {
+  id          String           @id @default(cuid())
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String           @db.VarChar(80)
+  topic       String?          @db.VarChar(300)
+  kind        TeamChannelKind  @default(PUBLIC)
+  createdById String
+  createdBy   User             @relation("TeamChannelCreator", fields: [createdById], references: [id])
+  archived    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  members     TeamChannelMember[]
+  messages    TeamMessage[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, kind, archived])
+}
+
+model TeamChannelMember {
+  id        String      @id @default(cuid())
+  channelId String
+  channel   TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation("TeamChannelMember", fields: [userId], references: [id])
+  joinedAt  DateTime    @default(now())
+  lastReadAt DateTime?
+
+  @@unique([channelId, userId])
+  @@index([userId])
+}
+
+model TeamMessage {
+  id        String      @id @default(cuid())
+  channelId String
+  channel   TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User        @relation("TeamMessageAuthor", fields: [authorId], references: [id])
+  body      String      @db.Text
+  editedAt  DateTime?
+  createdAt DateTime    @default(now())
+
+  @@index([channelId, createdAt])
+}
+
+enum SitePageStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model Site {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug          String     @db.VarChar(80)
+  name          String     @db.VarChar(120)
+  description   String?    @db.VarChar(500)
+  themeColor    String     @default("#0f172a") @db.VarChar(20)
+  published     Boolean    @default(false)
+  createdById   String
+  createdBy     User       @relation("SiteCreator", fields: [createdById], references: [id])
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  pages         SitePage[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, published])
+}
+
+model SitePage {
+  id          String          @id @default(cuid())
+  siteId      String
+  site        Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  slug        String          @db.VarChar(80)
+  title       String          @db.VarChar(200)
+  body        String          @db.MediumText
+  status      SitePageStatus  @default(DRAFT)
+  isHome      Boolean         @default(false)
+  position    Int             @default(0)
+  updatedById String?
+  updatedBy   User?           @relation("SitePageEditor", fields: [updatedById], references: [id])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([siteId, slug])
+  @@index([siteId, status])
+}
+
+enum SocialPlatform {
+  TWITTER
+  LINKEDIN
+  FACEBOOK
+  INSTAGRAM
+  THREADS
+  MASTODON
+}
+
+enum SocialPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+model SocialAccount {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform      SocialPlatform
+  handle        String         @db.VarChar(120)
+  displayName   String?        @db.VarChar(120)
+  avatarUrl     String?        @db.VarChar(500)
+  active        Boolean        @default(true)
+  connectedById String
+  connectedBy   User           @relation("SocialAccountConnector", fields: [connectedById], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  posts         SocialPostTarget[]
+
+  @@unique([workspaceId, platform, handle])
+  @@index([workspaceId, active])
+}
+
+model SocialPost {
+  id            String              @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User                @relation("SocialPostAuthor", fields: [authorId], references: [id])
+  body          String              @db.Text
+  mediaUrl      String?             @db.VarChar(500)
+  scheduledAt   DateTime?
+  publishedAt   DateTime?
+  status        SocialPostStatus    @default(DRAFT)
+  failureReason String?             @db.VarChar(500)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  targets       SocialPostTarget[]
+
+  @@index([workspaceId, status, scheduledAt])
+}
+
+model SocialPostTarget {
+  id         String        @id @default(cuid())
+  postId     String
+  post       SocialPost    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  accountId  String
+  account    SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  externalId String?       @db.VarChar(200)
+  status     SocialPostStatus @default(SCHEDULED)
+  error      String?       @db.VarChar(500)
+
+  @@unique([postId, accountId])
+  @@index([accountId, status])
+}
+
+model ConnectGroup {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug        String        @db.VarChar(80)
+  name        String        @db.VarChar(120)
+  description String?       @db.VarChar(500)
+  archived    Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  posts       ConnectPost[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, archived])
+}
+
+model ConnectPost {
+  id          String           @id @default(cuid())
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       ConnectGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  authorId    String
+  author      User             @relation("ConnectPostAuthor", fields: [authorId], references: [id])
+  title       String?          @db.VarChar(200)
+  body        String           @db.Text
+  pinned      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  comments    ConnectComment[]
+  likes       ConnectLike[]
+
+  @@index([workspaceId, groupId, createdAt])
+  @@index([workspaceId, pinned, createdAt])
+}
+
+model ConnectComment {
+  id        String      @id @default(cuid())
+  postId    String
+  post      ConnectPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User        @relation("ConnectCommentAuthor", fields: [authorId], references: [id])
+  body      String      @db.Text
+  createdAt DateTime    @default(now())
+
+  @@index([postId, createdAt])
+}
+
+model ConnectLike {
+  id        String      @id @default(cuid())
+  postId    String
+  post      ConnectPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation("ConnectLikeUser", fields: [userId], references: [id])
+  createdAt DateTime    @default(now())
+
+  @@unique([postId, userId])
+  @@index([userId])
+}
+
+// ---------------- Marketing Automation ----------------
+
+enum LeadScoreEventType {
+  EMAIL_OPENED
+  EMAIL_CLICKED
+  FORM_SUBMITTED
+  MEETING_HELD
+  PAGE_VISIT
+  MANUAL
+}
+
+model LeadScoreRule {
+  id          String             @id @default(cuid())
+  workspaceId String
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String             @db.VarChar(160)
+  eventType   LeadScoreEventType
+  points      Int
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  events      LeadScoreEvent[]
+
+  @@index([workspaceId, eventType])
+}
+
+model LeadScoreEvent {
+  id          String             @id @default(cuid())
+  workspaceId String
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId   String
+  contact     Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  ruleId      String?
+  rule        LeadScoreRule?     @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  eventType   LeadScoreEventType
+  points      Int
+  reason      String?            @db.VarChar(300)
+  createdAt   DateTime           @default(now())
+
+  @@index([workspaceId, contactId, createdAt])
+}
+
+// ---------------- A/B Experiments (PageSense) ----------------
+
+enum ExperimentStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+enum ExperimentEventKind {
+  VIEW
+  CONVERSION
+}
+
+model Experiment {
+  id            String                  @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug          String                  @db.VarChar(80)
+  name          String                  @db.VarChar(160)
+  hypothesis    String?                 @db.VarChar(1000)
+  primaryMetric String?                 @db.VarChar(120)
+  status        ExperimentStatus        @default(DRAFT)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  variants      ExperimentVariant[]
+  assignments   ExperimentAssignment[]
+  events        ExperimentEvent[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status])
+}
+
+model ExperimentVariant {
+  id           String      @id @default(cuid())
+  experimentId String
+  experiment   Experiment  @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  key          String      @db.VarChar(40)
+  label        String      @db.VarChar(120)
+  weight       Int         @default(50)
+  isControl    Boolean     @default(false)
+
+  @@unique([experimentId, key])
+}
+
+model ExperimentAssignment {
+  id           String      @id @default(cuid())
+  experimentId String
+  experiment   Experiment  @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  visitorId    String      @db.VarChar(64)
+  variantKey   String      @db.VarChar(40)
+  assignedAt   DateTime    @default(now())
+
+  @@unique([experimentId, visitorId])
+  @@index([experimentId, variantKey])
+}
+
+model ExperimentEvent {
+  id           String              @id @default(cuid())
+  experimentId String
+  experiment   Experiment          @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  variantKey   String              @db.VarChar(40)
+  visitorId    String              @db.VarChar(64)
+  kind         ExperimentEventKind
+  value        Decimal?            @db.Decimal(14, 2)
+  occurredAt   DateTime            @default(now())
+
+  @@index([experimentId, variantKey, kind])
+  @@index([experimentId, occurredAt])
+}
+
+// ===== Module 27: Learn (LMS) =====
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseEnrollmentStatus {
+  ENROLLED
+  COMPLETED
+  DROPPED
+}
+
+model Course {
+  id            String       @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug          String       @db.VarChar(80)
+  title         String       @db.VarChar(160)
+  summary       String?      @db.VarChar(500)
+  description   String?      @db.Text
+  status        CourseStatus @default(DRAFT)
+  coverImageUrl String?      @db.VarChar(500)
+  createdById   String
+  publishedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  lessons       Lesson[]
+  enrollments   CourseEnrollment[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status])
+}
+
+model Lesson {
+  id              String   @id @default(cuid())
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  position        Int      @default(0)
+  title           String   @db.VarChar(200)
+  content         String?  @db.Text
+  durationMinutes Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  progress        LessonProgress[]
+
+  @@unique([courseId, position])
+  @@index([courseId])
+}
+
+model CourseEnrollment {
+  id           String                 @id @default(cuid())
+  courseId     String
+  course       Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  learnerEmail String                 @db.VarChar(200)
+  learnerName  String                 @db.VarChar(160)
+  status       CourseEnrollmentStatus @default(ENROLLED)
+  enrolledAt   DateTime               @default(now())
+  completedAt  DateTime?
+  progress     LessonProgress[]
+
+  @@unique([courseId, learnerEmail])
+  @@index([courseId, status])
+}
+
+model LessonProgress {
+  id           String           @id @default(cuid())
+  enrollmentId String
+  enrollment   CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId     String
+  lesson       Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completedAt  DateTime         @default(now())
+
+  @@unique([enrollmentId, lessonId])
+  @@index([lessonId])
+}
+
+// ===== Module 28: Payroll =====
+
+enum PayRunStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELED
+}
+
+enum PayItemKind {
+  EARNING
+  DEDUCTION
+  TAX
+}
+
+model PayRun {
+  id               String       @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  label            String       @db.VarChar(160)
+  periodStart      DateTime     @db.Date
+  periodEnd        DateTime     @db.Date
+  payDate          DateTime     @db.Date
+  currency         String       @default("USD") @db.Char(3)
+  status           PayRunStatus @default(DRAFT)
+  totalGross       Decimal      @default(0) @db.Decimal(14, 2)
+  totalDeductions  Decimal      @default(0) @db.Decimal(14, 2)
+  totalTax         Decimal      @default(0) @db.Decimal(14, 2)
+  totalNet         Decimal      @default(0) @db.Decimal(14, 2)
+  notes            String?      @db.VarChar(1000)
+  createdById      String
+  approvedAt       DateTime?
+  paidAt           DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  slips            PaySlip[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, payDate])
+}
+
+model PaySlip {
+  id            String        @id @default(cuid())
+  payRunId      String
+  payRun        PayRun        @relation(fields: [payRunId], references: [id], onDelete: Cascade)
+  employeeId    String
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  gross         Decimal       @default(0) @db.Decimal(14, 2)
+  deductions    Decimal       @default(0) @db.Decimal(14, 2)
+  tax           Decimal       @default(0) @db.Decimal(14, 2)
+  net           Decimal       @default(0) @db.Decimal(14, 2)
+  notes         String?       @db.VarChar(500)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  items         PaySlipItem[]
+
+  @@unique([payRunId, employeeId])
+  @@index([employeeId])
+}
+
+model PaySlipItem {
+  id        String      @id @default(cuid())
+  paySlipId String
+  paySlip   PaySlip     @relation(fields: [paySlipId], references: [id], onDelete: Cascade)
+  kind      PayItemKind
+  label     String      @db.VarChar(120)
+  amount    Decimal     @db.Decimal(14, 2)
+  createdAt DateTime    @default(now())
+
+  @@index([paySlipId, kind])
+}
+
+// ---------------- ITSM (Assets / Changes / Problems) ----------------
+
+enum AssetStatus {
+  IN_USE
+  IN_STORAGE
+  RETIRED
+  LOST
+}
+
+enum ChangeStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  CANCELED
+}
+
+enum ChangeRisk {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ProblemStatus {
+  OPEN
+  INVESTIGATING
+  KNOWN_ERROR
+  RESOLVED
+  CLOSED
+}
+
+model Asset {
+  id                   String      @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tag                  String      @db.VarChar(60)
+  name                 String      @db.VarChar(160)
+  category             String      @default("general") @db.VarChar(60)
+  status               AssetStatus @default(IN_USE)
+  serial               String?     @db.VarChar(120)
+  vendor               String?     @db.VarChar(120)
+  location             String?     @db.VarChar(160)
+  assignedToEmployeeId String?
+  assignedTo           Employee?   @relation("AssetAssignee", fields: [assignedToEmployeeId], references: [id], onDelete: SetNull)
+  purchaseDate         DateTime?   @db.Date
+  cost                 Decimal?    @db.Decimal(12, 2)
+  notes                String?     @db.VarChar(1000)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  changes              Change[]
+  problems             Problem[]
+
+  @@unique([workspaceId, tag])
+  @@index([workspaceId, status])
+  @@index([assignedToEmployeeId])
+}
+
+model Change {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  number       Int
+  title        String       @db.VarChar(200)
+  description  String?      @db.Text
+  status       ChangeStatus @default(DRAFT)
+  risk         ChangeRisk   @default(MEDIUM)
+  assetId      String?
+  asset        Asset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  requestedById String
+  approvedAt   DateTime?
+  scheduledAt  DateTime?
+  completedAt  DateTime?
+  rollbackPlan String?      @db.VarChar(2000)
+  notes        String?      @db.VarChar(2000)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+  @@index([assetId])
+}
+
+model Problem {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  number      Int
+  title       String        @db.VarChar(200)
+  description String?       @db.Text
+  status      ProblemStatus @default(OPEN)
+  priority    Priority      @default(MEDIUM)
+  assetId     String?
+  asset       Asset?        @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  rootCause   String?       @db.VarChar(2000)
+  workaround  String?       @db.VarChar(2000)
+  resolution  String?       @db.VarChar(2000)
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+  @@index([assetId])
+}
+
+// ---------------- Commerce / Storefront ----------------
+
+enum StorefrontStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum StoreOrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELED
+  REFUNDED
+}
+
+model Storefront {
+  id            String           @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug          String           @unique
+  name          String           @db.VarChar(160)
+  headline      String?          @db.VarChar(240)
+  currency      String           @default("USD") @db.Char(3)
+  supportEmail  String?          @db.VarChar(160)
+  status        StorefrontStatus @default(DRAFT)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([workspaceId])
+}
+
+model StoreCustomer {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String       @db.VarChar(160)
+  name        String       @db.VarChar(160)
+  phone       String?      @db.VarChar(60)
+  shippingAddress String?  @db.VarChar(1000)
+  notes       String?      @db.VarChar(1000)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  orders      StoreOrder[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+}
+
+model StoreOrder {
+  id          String           @id @default(cuid())
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  number      Int
+  customerId  String
+  customer    StoreCustomer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  status      StoreOrderStatus @default(PENDING)
+  currency    String           @default("USD") @db.Char(3)
+  subtotal    Decimal          @default(0) @db.Decimal(14, 2)
+  tax         Decimal          @default(0) @db.Decimal(14, 2)
+  total       Decimal          @default(0) @db.Decimal(14, 2)
+  notes       String?          @db.VarChar(2000)
+  paidAt      DateTime?
+  fulfilledAt DateTime?
+  canceledAt  DateTime?
+  refundedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  items       StoreOrderItem[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+  @@index([customerId])
+}
+
+model StoreOrderItem {
+  id          String     @id @default(cuid())
+  orderId     String
+  order       StoreOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  nameSnapshot String    @db.VarChar(200)
+  quantity    Int        @default(1)
+  unitPrice   Decimal    @db.Decimal(14, 2)
+  taxPercent  Decimal    @default(0) @db.Decimal(5, 2)
+  lineSubtotal Decimal   @default(0) @db.Decimal(14, 2)
+  lineTax     Decimal    @default(0) @db.Decimal(14, 2)
+  lineTotal   Decimal    @default(0) @db.Decimal(14, 2)
+  createdAt   DateTime   @default(now())
+
+  @@unique([orderId, productId])
+  @@index([orderId])
+}
+
+// ---------------- OneAuth / SAML SSO ----------------
+
+enum SsoProtocol {
+  SAML
+  OIDC
+}
+
+enum SsoProviderStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
+enum SsoLoginKind {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  PROVISION
+}
+
+model SsoProvider {
+  id          String            @id @default(cuid())
+  workspaceId String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String            @db.VarChar(160)
+  protocol    SsoProtocol       @default(SAML)
+  status      SsoProviderStatus @default(DRAFT)
+  domain      String?           @db.VarChar(160)
+  entityId    String            @db.VarChar(400)
+  ssoUrl      String            @db.VarChar(600)
+  sloUrl      String?           @db.VarChar(600)
+  certificate String?           @db.Text
+  emailAttr   String            @default("email") @db.VarChar(80)
+  nameAttr    String            @default("name") @db.VarChar(80)
+  defaultRole SystemRole        @default(MEMBER)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  events      SsoLoginEvent[]
+
+  @@unique([workspaceId, name])
+  @@unique([workspaceId, domain])
+  @@index([workspaceId, status])
+}
+
+model SsoLoginEvent {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  providerId  String
+  provider    SsoProvider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  email       String       @db.VarChar(160)
+  kind        SsoLoginKind
+  reason      String?      @db.VarChar(400)
+  ipAddress   String?      @db.VarChar(64)
+  userAgent   String?      @db.VarChar(400)
+  occurredAt  DateTime     @default(now())
+
+  @@index([workspaceId, occurredAt])
+  @@index([providerId, occurredAt])
 }

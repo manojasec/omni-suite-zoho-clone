@@ -5,10 +5,33 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Building2, Target, Receipt, FileText, FolderKanban,
   CheckSquare, LifeBuoy, FormInput, Send, BarChart3, Settings, Inbox, UserPlus,
+  ClipboardList,
   Warehouse, Package, Truck, ShoppingCart,
   Wallet, IdCard, CalendarClock, Clock,
   PenLine, CalendarDays, CalendarRange, Bug, MessageCircle, Workflow, Mail,
   BookOpen, Landmark, Scale, BookText, ScrollText,
+  Briefcase, UserCircle, Calendar,
+  FolderOpen, HardDrive,
+  Repeat,
+  StickyNote,
+  KeyRound,
+  PartyPopper,
+  Hash,
+  Globe,
+  Megaphone,
+  Newspaper,
+  Flame,
+  FlaskConical,
+  GraduationCap,
+  Banknote,
+  Laptop,
+  GitPullRequest,
+  AlertTriangle,
+  Store,
+  ShoppingBag,
+  UsersRound,
+  ShieldCheck,
+  LogIn,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -71,17 +94,42 @@ const groups: Group[] = [
     ],
   },
   {
+    label: "Subscriptions",
+    items: [
+      { href: "/app/subscriptions", label: "Overview", icon: Repeat },
+      { href: "/app/subscriptions/plans", label: "Plans", icon: Package },
+      { href: "/app/subscriptions/list", label: "Subscriptions", icon: Repeat },
+      { href: "/app/subscriptions/invoices", label: "Invoices", icon: Receipt },
+    ],
+  },
+  {
     label: "HR",
     items: [
       { href: "/app/hr", label: "Overview", icon: IdCard },
       { href: "/app/hr/employees", label: "Employees", icon: Users },
       { href: "/app/hr/leave", label: "Leave", icon: CalendarClock },
       { href: "/app/hr/attendance", label: "Attendance", icon: Clock },
+      { href: "/app/hr/payroll", label: "Payroll", icon: Banknote },
+      { href: "/app/learn", label: "Learn", icon: GraduationCap },
+    ],
+  },
+  {
+    label: "Recruit",
+    items: [
+      { href: "/app/recruit", label: "Overview", icon: Briefcase },
+      { href: "/app/recruit/jobs", label: "Jobs", icon: Briefcase },
+      { href: "/app/recruit/candidates", label: "Candidates", icon: UserCircle },
+      { href: "/app/recruit/pipeline", label: "Pipeline", icon: Workflow },
+      { href: "/app/recruit/interviews", label: "Interviews", icon: Calendar },
     ],
   },
   {
     label: "Documents",
     items: [
+      { href: "/app/files", label: "Files", icon: HardDrive },
+      { href: "/app/files/starred", label: "Starred", icon: FolderOpen },
+      { href: "/app/notes", label: "Notes", icon: StickyNote },
+      { href: "/app/vault", label: "Vault", icon: KeyRound },
       { href: "/app/esign", label: "E-Signature", icon: PenLine },
     ],
   },
@@ -90,6 +138,7 @@ const groups: Group[] = [
     items: [
       { href: "/app/bookings", label: "Appointments", icon: CalendarDays },
       { href: "/app/bookings/types", label: "Booking pages", icon: CalendarRange },
+      { href: "/app/events", label: "Events", icon: PartyPopper },
     ],
   },
   {
@@ -102,6 +151,8 @@ const groups: Group[] = [
     label: "Conversations",
     items: [
       { href: "/app/chat", label: "Live Chat", icon: MessageCircle },
+      { href: "/app/channels", label: "Channels", icon: Hash },
+      { href: "/app/connect", label: "Connect", icon: Newspaper },
       { href: "/app/mail", label: "Mail", icon: Mail },
     ],
   },
@@ -116,7 +167,26 @@ const groups: Group[] = [
     label: "Service",
     items: [
       { href: "/app/helpdesk/tickets", label: "Tickets", icon: LifeBuoy },
+      { href: "/app/itsm/assets", label: "IT assets", icon: Laptop },
+      { href: "/app/itsm/changes", label: "Changes", icon: GitPullRequest },
+      { href: "/app/itsm/problems", label: "Problems", icon: AlertTriangle },
       { href: "/app/forms", label: "Forms", icon: FormInput },
+      { href: "/app/surveys", label: "Surveys", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Storefront",
+    items: [
+      { href: "/app/store", label: "Storefront", icon: Store },
+      { href: "/app/store/customers", label: "Customers", icon: UsersRound },
+      { href: "/app/store/orders", label: "Orders", icon: ShoppingBag },
+    ],
+  },
+  {
+    label: "Identity",
+    items: [
+      { href: "/app/sso", label: "Single sign-on", icon: ShieldCheck },
+      { href: "/app/sso/events", label: "Login events", icon: LogIn },
     ],
   },
   {
@@ -124,7 +194,13 @@ const groups: Group[] = [
     items: [
       { href: "/app/campaigns", label: "Campaigns", icon: Send },
       { href: "/app/automation", label: "Automation", icon: Workflow },
+      { href: "/app/scoring", label: "Lead scoring", icon: Flame },
+      { href: "/app/experiments", label: "Experiments", icon: FlaskConical },
+      { href: "/app/sites", label: "Sites", icon: Globe },
+      { href: "/app/social", label: "Social", icon: Megaphone },
       { href: "/app/reports", label: "Reports", icon: BarChart3 },
+      { href: "/app/reports/dashboards", label: "Dashboards", icon: BarChart3 },
+      { href: "/app/reports/pivots", label: "Pivot tables", icon: BarChart3 },
     ],
   },
 ];
