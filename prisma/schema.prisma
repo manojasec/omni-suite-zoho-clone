@@ -146,6 +146,7 @@ model Workspace {
   deals              Deal[]
   customers          Customer[]
   invoices           Invoice[]
+  quotes             Quote[]
   products           Product[]
   projects           Project[]
   tasks              Task[]
@@ -235,6 +236,11 @@ model Workspace {
   kbCategories       KbCategory[]
   kbArticles         KbArticle[]
   timeEntries        TimeEntry[]
+  statusComponents   StatusComponent[]
+  statusIncidents    StatusIncident[]
+  changelogEntries   ChangelogEntry[]
+  roadmapItems       RoadmapItem[]
+  roadmapVotes       RoadmapVote[]
 }
 
 model Membership {
@@ -449,6 +455,7 @@ model Deal {
   owner           User?      @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   activities      Activity[]
   invoices        Invoice[]
+  quotes          Quote[]
 
   @@index([workspaceId, stageId])
 }
@@ -468,6 +475,8 @@ model Customer {
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
   invoices       Invoice[]
+  quotes         Quote[]
+  portalAccesses PortalAccess[]
 
   @@index([workspaceId])
 }
@@ -3550,4 +3559,798 @@ model TimeEntry {
   @@index([workspaceId, userId, startedAt])
   @@index([workspaceId, projectId])
   @@index([workspaceId, endedAt])
+}
+
+// ---------------- Status Page (public uptime) ----------------
+
+enum StatusComponentState {
+  OPERATIONAL
+  DEGRADED
+  PARTIAL_OUTAGE
+  MAJOR_OUTAGE
+  MAINTENANCE
+}
+
+enum StatusIncidentState {
+  INVESTIGATING
+  IDENTIFIED
+  MONITORING
+  RESOLVED
+}
+
+enum StatusIncidentImpact {
+  NONE
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+model StatusComponent {
+  id          String               @id @default(cuid())
+  workspaceId String
+  name        String               @db.VarChar(120)
+  description String?              @db.VarChar(500)
+  state       StatusComponentState @default(OPERATIONAL)
+  position    Int                  @default(0)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, position])
+}
+
+model StatusIncident {
+  id          String                 @id @default(cuid())
+  workspaceId String
+  title       String                 @db.VarChar(200)
+  state       StatusIncidentState    @default(INVESTIGATING)
+  impact      StatusIncidentImpact   @default(MINOR)
+  startedAt   DateTime               @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  updates     StatusIncidentUpdate[]
+
+  @@index([workspaceId, startedAt])
+  @@index([workspaceId, state])
+}
+
+model StatusIncidentUpdate {
+  id         String              @id @default(cuid())
+  incidentId String
+  state      StatusIncidentState
+  body       String              @db.Text
+  createdAt  DateTime            @default(now())
+  incident   StatusIncident      @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId, createdAt])
+}
+
+// ---------------- Changelog (public release notes) ----------------
+
+enum ChangelogEntryStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ChangelogEntryType {
+  FEATURE
+  IMPROVEMENT
+  FIX
+  ANNOUNCEMENT
+}
+
+model ChangelogEntry {
+  id          String               @id @default(cuid())
+  workspaceId String
+  title       String                @db.VarChar(200)
+  slug        String                @db.VarChar(200)
+  excerpt     String?               @db.VarChar(500)
+  body        String                @db.LongText
+  type        ChangelogEntryType    @default(FEATURE)
+  status      ChangelogEntryStatus  @default(DRAFT)
+  authorId    String?
+  publishedAt DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status, publishedAt])
+}
+
+enum RoadmapItemStatus {
+  PLANNED
+  IN_PROGRESS
+  SHIPPED
+}
+
+model RoadmapItem {
+  id           String            @id @default(cuid())
+  workspaceId  String
+  title        String            @db.VarChar(200)
+  description  String?           @db.Text
+  category     String?           @db.VarChar(80)
+  status       RoadmapItemStatus @default(PLANNED)
+  position     Int               @default(0)
+  voteCount    Int               @default(0)
+  isPublic     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  votes     RoadmapVote[]
+
+  @@index([workspaceId, status, position])
+  @@index([workspaceId, voteCount])
+}
+
+model RoadmapVote {
+  id          String   @id @default(cuid())
+  workspaceId String
+  itemId      String
+  voterEmail  String   @db.VarChar(160)
+  createdAt   DateTime @default(now())
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  item      RoadmapItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, voterEmail])
+  @@index([workspaceId])
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+model Quote {
+  id           String          @id @default(cuid())
+  workspaceId  String
+  number       String          @db.VarChar(40)
+  customerId   String
+  dealId       String?
+  status       QuoteStatus     @default(DRAFT)
+  issueDate    DateTime        @default(now())
+  expiresAt    DateTime?
+  currency     String          @default("USD") @db.VarChar(8)
+  subtotal     Decimal         @default(0) @db.Decimal(14, 2)
+  tax          Decimal         @default(0) @db.Decimal(14, 2)
+  total        Decimal         @default(0) @db.Decimal(14, 2)
+  notes        String?         @db.Text
+  invoiceId    String?
+  acceptedAt   DateTime?
+  rejectedAt   DateTime?
+  convertedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer         @relation(fields: [customerId], references: [id])
+  deal      Deal?            @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  lineItems QuoteLineItem[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+  @@index([workspaceId, customerId])
+}
+
+model QuoteLineItem {
+  id          String  @id @default(cuid())
+  quoteId     String
+  description String  @db.VarChar(500)
+  qty         Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal @default(0) @db.Decimal(14, 2)
+  taxPercent  Decimal @default(0) @db.Decimal(5, 2)
+  amount      Decimal @default(0) @db.Decimal(14, 2)
+  position    Int     @default(0)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
+model PortalAccess {
+  id          String    @id @default(cuid())
+  workspaceId String
+  customerId  String
+  token       String    @unique @db.VarChar(80)
+  label       String?   @db.VarChar(120)
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  useCount    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, customerId])
+}
+
+enum GoalStatus {
+  ON_TRACK
+  AT_RISK
+  OFF_TRACK
+  COMPLETED
+  ARCHIVED
+}
+
+enum KeyResultUnit {
+  PERCENT
+  NUMBER
+  CURRENCY
+  BOOLEAN
+}
+
+model Goal {
+  id          String      @id @default(cuid())
+  workspaceId String
+  parentId    String?
+  ownerId     String?
+  title       String      @db.VarChar(200)
+  description String?     @db.Text
+  status      GoalStatus  @default(ON_TRACK)
+  startDate   DateTime?
+  dueDate     DateTime?
+  progress    Decimal     @default(0) @db.Decimal(6, 2)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  parent      Goal?       @relation("GoalTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Goal[]      @relation("GoalTree")
+  keyResults  KeyResult[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, ownerId])
+  @@index([parentId])
+}
+
+model KeyResult {
+  id           String        @id @default(cuid())
+  goalId       String
+  title        String        @db.VarChar(200)
+  unit         KeyResultUnit @default(PERCENT)
+  startValue   Decimal       @default(0) @db.Decimal(14, 2)
+  targetValue  Decimal       @default(100) @db.Decimal(14, 2)
+  currentValue Decimal       @default(0) @db.Decimal(14, 2)
+  position     Int           @default(0)
+  goal         Goal          @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+}
+
+model TaxRate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String   @db.VarChar(120)
+  rate        Decimal  @default(0) @db.Decimal(6, 3)
+  region      String?  @db.VarChar(80)
+  isInclusive Boolean  @default(false)
+  isDefault   Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, isArchived])
+}
+
+model TwoFactorRecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String    @db.VarChar(120)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+model ApprovalPolicy {
+  id            String            @id @default(cuid())
+  workspaceId   String
+  name          String            @db.VarChar(120)
+  resource      String            @db.VarChar(60)
+  threshold     Decimal?          @db.Decimal(14, 2)
+  approverIds   String            @db.Text
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  requests      ApprovalRequest[]
+
+  @@index([workspaceId, resource])
+}
+
+model ApprovalRequest {
+  id          String                @id @default(cuid())
+  workspaceId String
+  policyId    String?
+  resource    String                @db.VarChar(60)
+  resourceId  String                @db.VarChar(40)
+  requesterId String
+  status      ApprovalRequestStatus @default(PENDING)
+  reason      String?               @db.Text
+  amount      Decimal?              @db.Decimal(14, 2)
+  decidedById String?
+  decidedAt   DateTime?
+  decisionNote String?              @db.Text
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  policy      ApprovalPolicy?       @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  decisions   ApprovalDecisionLog[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, requesterId])
+  @@index([resource, resourceId])
+}
+
+model ApprovalDecisionLog {
+  id          String           @id @default(cuid())
+  requestId   String
+  approverId  String
+  decision    ApprovalDecision
+  note        String?          @db.Text
+  createdAt   DateTime         @default(now())
+  request     ApprovalRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String   @db.VarChar(120)
+  category    String   @db.VarChar(60)
+  subject     String   @db.VarChar(200)
+  bodyText    String   @db.Text
+  bodyHtml    String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, category])
+}
+
+
+// ---------------- DataPrep ----------------
+
+enum DataPrepDatasetStatus {
+  DRAFT
+  READY
+  RUNNING
+  FAILED
+}
+
+enum DataPrepRuleKind {
+  TRIM
+  LOWERCASE
+  UPPERCASE
+  REMOVE_DUPLICATES
+  FILL_MISSING
+  REPLACE
+  DROP_COLUMN
+  RENAME_COLUMN
+}
+
+model DataPrepDataset {
+  id          String                @id @default(cuid())
+  workspaceId String
+  name        String                @db.VarChar(160)
+  description String?               @db.VarChar(500)
+  sourceType  String                @default("csv") @db.VarChar(40)
+  sourceConfig Json?
+  rowCount    Int                   @default(0)
+  columnCount Int                   @default(0)
+  status      DataPrepDatasetStatus @default(DRAFT)
+  createdById String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  rules       DataPrepRule[]
+  runs        DataPrepRun[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status])
+}
+
+model DataPrepRule {
+  id        String           @id @default(cuid())
+  datasetId String
+  position  Int              @default(0)
+  kind      DataPrepRuleKind
+  column    String?          @db.VarChar(120)
+  config    Json?
+  createdAt DateTime         @default(now())
+  dataset   DataPrepDataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId, position])
+}
+
+model DataPrepRun {
+  id          String                @id @default(cuid())
+  datasetId   String
+  status      DataPrepDatasetStatus @default(RUNNING)
+  rowsBefore  Int                   @default(0)
+  rowsAfter   Int                   @default(0)
+  rulesApplied Int                  @default(0)
+  startedAt   DateTime              @default(now())
+  finishedAt  DateTime?
+  error       String?               @db.VarChar(1000)
+  dataset     DataPrepDataset       @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId, startedAt])
+}
+
+// ---------------- Catalyst (serverless functions) ----------------
+
+enum CatalystFunctionStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
+enum CatalystRuntime {
+  NODE_18
+  NODE_20
+  PYTHON_311
+}
+
+enum CatalystInvocationStatus {
+  SUCCESS
+  ERROR
+  TIMEOUT
+}
+
+model CatalystFunction {
+  id          String                 @id @default(cuid())
+  workspaceId String
+  name        String                 @db.VarChar(160)
+  slug        String                 @db.VarChar(80)
+  description String?                @db.VarChar(500)
+  runtime     CatalystRuntime        @default(NODE_20)
+  handler     String                 @default("index.handler") @db.VarChar(120)
+  code        String                 @db.LongText
+  status      CatalystFunctionStatus @default(DRAFT)
+  timeoutMs   Int                    @default(30000)
+  memoryMb    Int                    @default(128)
+  invokeCount Int                    @default(0)
+  errorCount  Int                    @default(0)
+  lastInvokedAt DateTime?
+  createdById String
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  invocations CatalystInvocation[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status])
+}
+
+model CatalystInvocation {
+  id         String                   @id @default(cuid())
+  functionId String
+  status     CatalystInvocationStatus
+  durationMs Int                      @default(0)
+  input      Json?
+  output     Json?
+  error      String?                  @db.VarChar(2000)
+  log        String?                  @db.Text
+  startedAt  DateTime                 @default(now())
+  function   CatalystFunction         @relation(fields: [functionId], references: [id], onDelete: Cascade)
+
+  @@index([functionId, startedAt])
+}
+
+// ---------------- Assist (remote support sessions) ----------------
+
+enum AssistSessionStatus {
+  PENDING
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum AssistEventKind {
+  CREATED
+  JOINED
+  LEFT
+  CHAT
+  CONTROL_GRANTED
+  CONTROL_RELEASED
+  FILE_TRANSFER
+  ENDED
+}
+
+model AssistSession {
+  id            String              @id @default(cuid())
+  workspaceId   String
+  code          String              @unique @db.VarChar(12)
+  technicianId  String
+  customerName  String              @db.VarChar(160)
+  customerEmail String?             @db.VarChar(160)
+  customerPhone String?             @db.VarChar(40)
+  topic         String?             @db.VarChar(300)
+  status        AssistSessionStatus @default(PENDING)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  durationSec   Int                 @default(0)
+  notes         String?             @db.Text
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  events        AssistEvent[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+  @@index([technicianId])
+}
+
+model AssistEvent {
+  id        String           @id @default(cuid())
+  sessionId String
+  kind      AssistEventKind
+  body      String?          @db.VarChar(1000)
+  actorId   String?
+  createdAt DateTime         @default(now())
+  session   AssistSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
+// ---------------- M59 Meetings/Webinar ----------------
+
+enum MeetingKind {
+  MEETING
+  WEBINAR
+}
+enum MeetingStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+enum MeetingAttendeeRole {
+  HOST
+  PRESENTER
+  ATTENDEE
+}
+
+model Meeting {
+  id            String        @id @default(cuid())
+  workspaceId   String
+  hostId        String
+  kind          MeetingKind   @default(MEETING)
+  title         String        @db.VarChar(200)
+  description   String?       @db.VarChar(2000)
+  scheduledAt   DateTime
+  durationMin   Int           @default(30)
+  joinCode      String        @unique @db.VarChar(16)
+  status        MeetingStatus @default(SCHEDULED)
+  recordingUrl  String?       @db.VarChar(500)
+  attendeeLimit Int           @default(100)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  attendees     MeetingAttendee[]
+  messages      MeetingMessage[]
+  @@index([workspaceId, status, scheduledAt])
+  @@index([workspaceId, hostId])
+}
+
+model MeetingAttendee {
+  id        String              @id @default(cuid())
+  meetingId String
+  userId    String?
+  name      String              @db.VarChar(160)
+  email     String?             @db.VarChar(190)
+  role      MeetingAttendeeRole @default(ATTENDEE)
+  joinedAt  DateTime?
+  leftAt    DateTime?
+  meeting   Meeting             @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  @@index([meetingId])
+}
+
+model MeetingMessage {
+  id        String   @id @default(cuid())
+  meetingId String
+  actorId   String?
+  authorName String  @db.VarChar(160)
+  body      String   @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  @@index([meetingId, createdAt])
+}
+
+// ---------------- M60 Cliq team chat ----------------
+
+enum ChannelKind {
+  PUBLIC
+  PRIVATE
+  DM
+}
+enum ChannelMemberRole {
+  MEMBER
+  ADMIN
+}
+
+model Channel {
+  id           String      @id @default(cuid())
+  workspaceId  String
+  name         String      @db.VarChar(120)
+  topic        String?     @db.VarChar(300)
+  kind         ChannelKind @default(PUBLIC)
+  createdById  String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  members      ChannelMember[]
+  messages     ChannelMessage[]
+  @@unique([workspaceId, name])
+  @@index([workspaceId, kind])
+}
+
+model ChannelMember {
+  id         String            @id @default(cuid())
+  channelId  String
+  userId     String
+  role       ChannelMemberRole @default(MEMBER)
+  joinedAt   DateTime          @default(now())
+  lastReadAt DateTime?
+  channel    Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  @@unique([channelId, userId])
+  @@index([userId])
+}
+
+model ChannelMessage {
+  id        String   @id @default(cuid())
+  channelId String
+  authorId  String
+  body      String   @db.VarChar(4000)
+  parentId  String?
+  createdAt DateTime @default(now())
+  editedAt  DateTime?
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  @@index([channelId, createdAt])
+  @@index([parentId])
+}
+
+// ---------------- M61 TeamInbox ----------------
+
+enum SharedThreadStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+enum SharedMessageDirection {
+  IN
+  OUT
+  NOTE
+}
+
+model SharedInbox {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String   @db.VarChar(160)
+  address     String   @db.VarChar(190)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     SharedInboxMember[]
+  threads     SharedThread[]
+  @@unique([workspaceId, address])
+  @@index([workspaceId])
+}
+
+model SharedInboxMember {
+  id       String      @id @default(cuid())
+  inboxId  String
+  userId   String
+  joinedAt DateTime    @default(now())
+  inbox    SharedInbox @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  @@unique([inboxId, userId])
+  @@index([userId])
+}
+
+model SharedThread {
+  id            String             @id @default(cuid())
+  inboxId       String
+  workspaceId   String
+  subject       String             @db.VarChar(300)
+  status        SharedThreadStatus @default(OPEN)
+  assignedToId  String?
+  fromName      String             @db.VarChar(160)
+  fromEmail     String             @db.VarChar(190)
+  lastMessageAt DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  inbox         SharedInbox        @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  messages      SharedMessage[]
+  @@index([inboxId, status, lastMessageAt])
+  @@index([workspaceId, assignedToId])
+}
+
+model SharedMessage {
+  id        String                 @id @default(cuid())
+  threadId  String
+  direction SharedMessageDirection
+  authorId  String?
+  authorName String                @db.VarChar(160)
+  body      String                 @db.Text
+  createdAt DateTime               @default(now())
+  thread    SharedThread           @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  @@index([threadId, createdAt])
+}
+
+// ---------------- M64 AI assistant (Zia) ----------------
+
+enum AIMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model AIConversation {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  title       String   @db.VarChar(200)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    AIMessage[]
+  @@index([workspaceId, userId, updatedAt])
+}
+
+model AIMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  role           AIMessageRole
+  content        String         @db.Text
+  createdAt      DateTime       @default(now())
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  @@index([conversationId, createdAt])
+}
+
+// ---------------- M66 SAML / SCIM ----------------
+
+enum SamlConnectionStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
+model SamlConnection {
+  id              String                @id @default(cuid())
+  workspaceId     String                @unique
+  name            String                @db.VarChar(160)
+  idpEntityId     String                @db.VarChar(500)
+  idpSsoUrl       String                @db.VarChar(500)
+  idpCertificate  String                @db.Text
+  spEntityId      String                @db.VarChar(500)
+  status          SamlConnectionStatus  @default(DRAFT)
+  createdById     String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+}
+
+model ScimToken {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String   @db.VarChar(160)
+  tokenHash   String   @unique @db.VarChar(190)
+  prefix      String   @db.VarChar(16)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String
+  createdAt   DateTime @default(now())
+  @@index([workspaceId, revokedAt])
 }

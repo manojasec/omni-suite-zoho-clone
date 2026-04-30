@@ -17,6 +17,7 @@ import {
   formatDate,
   validateFlowGraph,
 } from "@/modules/flows/schemas";
+import { FlowCanvas } from "@/modules/flows/flow-canvas";
 import {
   createFlowEdgeAction,
   createFlowNodeAction,
@@ -128,6 +129,8 @@ export default async function FlowDetailPage({
           Graph validates. {flow.nodes.length} nodes · {flow.edges.length} edges.
         </Card>
       )}
+
+      <FlowCanvas nodes={flow.nodes} edges={flow.edges} />
 
       <div className="grid gap-3 md:grid-cols-2">
         <Card className="p-4">

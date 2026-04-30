@@ -42,6 +42,11 @@ import {
   Library,
   GanttChart,
   Timer,
+  Database,
+  Code2,
+  MonitorSmartphone,
+  Sparkles,
+  MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,12 +73,14 @@ const groups: Group[] = [
     items: [
       { href: "/app/sales/pipeline", label: "Pipeline", icon: Target },
       { href: "/app/sales/deals", label: "Deals", icon: Target },
+      { href: "/app/goals", label: "Goals", icon: Target },
     ],
   },
   {
     label: "Billing",
     items: [
       { href: "/app/billing/invoices", label: "Invoices", icon: Receipt },
+      { href: "/app/quotes", label: "Quotes", icon: ScrollText },
       { href: "/app/billing/customers", label: "Customers", icon: Users },
       { href: "/app/billing/products", label: "Products", icon: FileText },
     ],
@@ -132,6 +139,9 @@ const groups: Group[] = [
       { href: "/app/recruit/pipeline", label: "Pipeline", icon: Workflow },
       { href: "/app/recruit/interviews", label: "Interviews", icon: Calendar },
       { href: "/app/careers", label: "Career Site", icon: Globe },
+      { href: "/app/status", label: "Status Page", icon: Activity },
+      { href: "/app/changelog", label: "Changelog", icon: Megaphone },
+      { href: "/app/roadmap", label: "Roadmap", icon: GanttChart },
     ],
   },
   {
@@ -163,6 +173,10 @@ const groups: Group[] = [
     items: [
       { href: "/app/chat", label: "Live Chat", icon: MessageCircle },
       { href: "/app/channels", label: "Channels", icon: Hash },
+      { href: "/app/cliq", label: "Cliq", icon: MessagesSquare },
+      { href: "/app/teaminbox", label: "Team Inbox", icon: Inbox },
+      { href: "/app/meetings", label: "Meetings", icon: Video },
+      { href: "/app/ai", label: "AI assistant", icon: Sparkles },
       { href: "/app/connect", label: "Connect", icon: Newspaper },
       { href: "/app/mail", label: "Mail", icon: Mail },
     ],
@@ -200,6 +214,7 @@ const groups: Group[] = [
     items: [
       { href: "/app/sso", label: "Single sign-on", icon: ShieldCheck },
       { href: "/app/sso/events", label: "Login events", icon: LogIn },
+      { href: "/app/settings/sso", label: "SAML & SCIM", icon: KeyRound },
     ],
   },
   {
@@ -219,6 +234,9 @@ const groups: Group[] = [
       { href: "/app/sheet", label: "Sheet", icon: Table2 },
       { href: "/app/slides", label: "Slides", icon: Presentation },
       { href: "/app/help", label: "Help Center", icon: Library },
+      { href: "/app/dataprep", label: "DataPrep", icon: Database },
+      { href: "/app/catalyst", label: "Catalyst", icon: Code2 },
+      { href: "/app/assist", label: "Remote Assist", icon: MonitorSmartphone },
     ],
   },
   {
@@ -233,6 +251,14 @@ const groups: Group[] = [
       { href: "/app/reports", label: "Reports", icon: BarChart3 },
       { href: "/app/reports/dashboards", label: "Dashboards", icon: BarChart3 },
       { href: "/app/reports/pivots", label: "Pivot tables", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      { href: "/app/tax-rates", label: "Tax rates", icon: Scale },
+      { href: "/app/approvals", label: "Approvals", icon: ShieldCheck },
+      { href: "/app/email-templates", label: "Email templates", icon: Mail },
     ],
   },
 ];

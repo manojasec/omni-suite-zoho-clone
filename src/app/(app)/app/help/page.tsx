@@ -83,7 +83,7 @@ export default async function HelpCenterPage({
   const categoryId = sp.category ?? undefined;
   const q = (sp.q ?? "").trim();
 
-  const [articles, summarySource, categories] = await Promise.all([
+  const [articles, summarySource, categories, workspace] = await Promise.all([
     prisma.kbArticle.findMany({
       where: {
         workspaceId: ctx.workspaceId,
@@ -120,6 +120,10 @@ export default async function HelpCenterPage({
       select: { id: true, name: true, slug: true, parentId: true },
       orderBy: { name: "asc" },
     }),
+    prisma.workspace.findUnique({
+      where: { id: ctx.workspaceId },
+      select: { slug: true },
+    }),
   ]);
 
   const summary = summarizeArticles(summarySource);
@@ -144,6 +148,20 @@ export default async function HelpCenterPage({
           </Link>
         ) : null}
       </div>
+
+      {workspace?.slug ? (
+        <Card className="p-3 text-xs">
+          <span className="text-muted-foreground">Public URL: </span>
+          <Link
+            href={`/help/${workspace.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono hover:underline"
+          >
+            /help/{workspace.slug}
+          </Link>
+        </Card>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-3">
         {KB_ARTICLE_STATUSES.map((s) => (

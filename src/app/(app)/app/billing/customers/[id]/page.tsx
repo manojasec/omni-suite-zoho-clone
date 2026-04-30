@@ -51,6 +51,15 @@ export default async function CustomerDetailPage({
         </form>
       </div>
 
+      <div>
+        <Link
+          href={`/app/billing/customers/${id}/portal`}
+          className="text-sm underline"
+        >
+          Manage portal links →
+        </Link>
+      </div>
+
       <CustomerForm
         action={update}
         initial={customer}

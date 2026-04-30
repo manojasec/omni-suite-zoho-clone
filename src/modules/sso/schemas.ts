@@ -204,3 +204,19 @@ export function formatDate(d: Date | null | undefined): string {
   if (Number.isNaN(t.getTime())) return "";
   return t.toISOString().slice(0, 16).replace("T", " ");
 }
+
+// ---------- M66: SamlConnection (workspace-level) + ScimToken ----------
+
+export const samlConnectionSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  idpEntityId: z.string().trim().min(1).max(500),
+  idpSsoUrl: z.string().trim().url().max(500),
+  idpCertificate: z.string().trim().min(20).max(20000),
+  spEntityId: z.string().trim().min(1).max(500),
+});
+export type SamlConnectionInput = z.infer<typeof samlConnectionSchema>;
+
+export const scimTokenSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+});
+export type ScimTokenInput = z.infer<typeof scimTokenSchema>;
