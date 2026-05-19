@@ -38,7 +38,13 @@ export default async function BookingConfirmedPage({
         <p className="text-sm text-muted-foreground">
           A confirmation will be sent to <strong>{booking.attendeeEmail}</strong>.
         </p>
-        <div className="pt-3">
+        <div className="pt-3 flex flex-col items-center gap-2">
+          <a
+            href={`/api/bookings/${booking.publicId}/ics`}
+            className="inline-flex items-center rounded-md border px-4 py-2 text-sm hover:bg-accent"
+          >
+            Add to calendar (.ics)
+          </a>
           <Link href={`/book/${slug}`} className="text-sm hover:underline">Book another time</Link>
         </div>
       </Card>

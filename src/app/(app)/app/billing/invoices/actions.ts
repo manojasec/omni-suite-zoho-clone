@@ -14,6 +14,7 @@ import {
 } from "@/modules/billing/schemas";
 import { computeTotals, lineAmount } from "@/modules/billing/totals";
 import { notifyUsers } from "@/modules/notifications/notify";
+import { postInvoiceToGL, postPaymentToGL } from "@/modules/accounting/posting";
 
 function parseLineItems(fd: FormData): LineItemInput[] {
   const descriptions = fd.getAll("li_description");
@@ -215,6 +216,15 @@ export async function setInvoiceStatusAction(id: string, fd: FormData) {
       resourceId: id,
     },
   });
+  // Auto-post to GL when invoice is finalized (SENT or beyond).
+  if (
+    parsed.data.status === InvoiceStatus.SENT ||
+    parsed.data.status === InvoiceStatus.PARTIALLY_PAID ||
+    parsed.data.status === InvoiceStatus.PAID ||
+    parsed.data.status === InvoiceStatus.OVERDUE
+  ) {
+    await postInvoiceToGL(id, ctx.userId).catch(() => undefined);
+  }
   revalidatePath(`/app/billing/invoices/${id}`);
   revalidatePath("/app/billing/invoices");
   return { ok: true };
@@ -248,7 +258,7 @@ export async function recordPaymentAction(invoiceId: string, fd: FormData) {
       ? InvoiceStatus.PARTIALLY_PAID
       : invoice.status;
 
-  await prisma.$transaction([
+  const [createdPayment] = await prisma.$transaction([
     prisma.payment.create({
       data: {
         invoiceId,
@@ -263,6 +273,9 @@ export async function recordPaymentAction(invoiceId: string, fd: FormData) {
       data: { balance, status: newStatus },
     }),
   ]);
+  // Ensure invoice is on the books before posting the receipt.
+  await postInvoiceToGL(invoiceId, ctx.userId).catch(() => undefined);
+  await postPaymentToGL(createdPayment.id, ctx.userId).catch(() => undefined);
 
   await prisma.auditLog.create({
     data: {

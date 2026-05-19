@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/session";
 import { assertCan } from "@/platform/permissions";
 import { expenseSchema } from "@/modules/expenses/schemas";
 import { recordAuditEvent } from "@/modules/audit/record";
+import { postExpenseToGL } from "@/modules/accounting/posting";
 
 function fdToObj(fd: FormData) {
   return {
@@ -197,6 +198,8 @@ export async function approveExpenseAction(id: string) {
     resource: "expense",
     resourceId: id,
   });
+  // Auto-post the approved expense to the general ledger.
+  await postExpenseToGL(id, ctx.userId).catch(() => undefined);
   revalidatePath(`/app/expenses/${id}`);
   revalidatePath("/app/expenses");
 }
