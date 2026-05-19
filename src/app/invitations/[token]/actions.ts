@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { notifyUsers } from "@/modules/notifications/notify";
 
 export async function acceptInvitationAction(token: string) {
   const session = await auth();
@@ -53,4 +54,21 @@ export async function acceptInvitationAction(token: string) {
       },
     }),
   ]);
+
+  // Notify workspace owners/admins that the invitation was accepted.
+  const admins = await prisma.membership.findMany({
+    where: { workspaceId: invite.workspaceId, role: { in: ["OWNER", "ADMIN"] }, status: "ACTIVE" },
+    select: { userId: true },
+  });
+  const adminIds = admins.map((m) => m.userId).filter((id) => id !== user.id);
+  if (adminIds.length > 0) {
+    await notifyUsers({
+      workspaceId: invite.workspaceId,
+      userIds: adminIds,
+      type: "invite.accepted",
+      title: `${user.name ?? user.email} accepted your invitation`,
+      href: "/app/settings/users",
+      meta: { userId: user.id, email: user.email },
+    });
+  }
 }

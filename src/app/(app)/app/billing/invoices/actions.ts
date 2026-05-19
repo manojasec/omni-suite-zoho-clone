@@ -14,6 +14,7 @@ import {
 } from "@/modules/billing/schemas";
 import { computeTotals, lineAmount } from "@/modules/billing/totals";
 import { notifyUsers } from "@/modules/notifications/notify";
+import { assertWithinPlanLimit, PlanLimitError } from "@/modules/billing/limits";
 
 function parseLineItems(fd: FormData): LineItemInput[] {
   const descriptions = fd.getAll("li_description");
@@ -62,6 +63,12 @@ function recomputeBalance(total: string, payments: { amount: Prisma.Decimal | st
 export async function createInvoiceAction(fd: FormData) {
   const ctx = await requireSession();
   assertCan(ctx.role, "invoice", "create");
+  try {
+    await assertWithinPlanLimit(ctx.workspaceId, "invoices");
+  } catch (err) {
+    if (err instanceof PlanLimitError) return { error: err.message };
+    throw err;
+  }
   const parsed = invoiceSchema.safeParse(fdToObj(fd));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const data = parsed.data;

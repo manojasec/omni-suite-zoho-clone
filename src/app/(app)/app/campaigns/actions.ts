@@ -8,6 +8,7 @@ import { assertCan } from "@/platform/permissions";
 import { CampaignStatus } from "@prisma/client";
 import { campaignSchema, audienceSchema, sendCampaignSchema } from "@/modules/marketing/schemas";
 import { compileAudienceWhere } from "@/modules/marketing/audience";
+import { assertWithinPlanLimit, PlanLimitError } from "@/modules/billing/limits";
 
 // ---------- AUDIENCES ----------
 
@@ -94,6 +95,12 @@ function campaignFromFd(fd: FormData) {
 export async function createCampaignAction(fd: FormData) {
   const ctx = await requireSession();
   assertCan(ctx.role, "campaign", "create");
+  try {
+    await assertWithinPlanLimit(ctx.workspaceId, "campaigns");
+  } catch (err) {
+    if (err instanceof PlanLimitError) return { error: err.message };
+    throw err;
+  }
   const parsed = campaignSchema.safeParse(campaignFromFd(fd));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const data = parsed.data;
