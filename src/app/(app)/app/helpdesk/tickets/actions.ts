@@ -11,6 +11,8 @@ import {
   ticketStatusSchema,
   ticketMessageSchema,
 } from "@/modules/helpdesk/schemas";
+import { assertWithinPlanLimit, PlanLimitError } from "@/modules/billing/limits";
+import { notifyUser } from "@/modules/notifications/notify";
 
 function fdToObj(fd: FormData) {
   return {
@@ -39,6 +41,12 @@ async function nextTicketNumber(workspaceId: string): Promise<number> {
 export async function createTicketAction(fd: FormData) {
   const ctx = await requireSession();
   assertCan(ctx.role, "ticket", "create");
+  try {
+    await assertWithinPlanLimit(ctx.workspaceId, "tickets");
+  } catch (err) {
+    if (err instanceof PlanLimitError) return { error: err.message };
+    throw err;
+  }
   const parsed = ticketSchema.safeParse(fdToObj(fd));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const data = parsed.data;
@@ -81,6 +89,17 @@ export async function createTicketAction(fd: FormData) {
       resourceId: ticketId,
     },
   });
+  // Notify the assignee if someone else created the ticket.
+  if (data.assigneeId && data.assigneeId !== ctx.userId) {
+    await notifyUser({
+      workspaceId: ctx.workspaceId,
+      userId: data.assigneeId,
+      type: "ticket.assigned",
+      title: `New ticket assigned to you: ${data.subject}`,
+      href: `/app/helpdesk/tickets/${ticketId}`,
+      meta: { ticketId },
+    });
+  }
   revalidatePath("/app/helpdesk/tickets");
   redirect(`/app/helpdesk/tickets/${ticketId}`);
 }
@@ -93,7 +112,7 @@ export async function updateTicketAction(id: string, fd: FormData) {
   const data = parsed.data;
   const existing = await prisma.ticket.findFirst({
     where: { id, workspaceId: ctx.workspaceId },
-    select: { id: true },
+    select: { id: true, assigneeId: true, subject: true },
   });
   if (!existing) return { error: "Not found" };
   await prisma.ticket.update({
@@ -120,6 +139,17 @@ export async function updateTicketAction(id: string, fd: FormData) {
       resourceId: id,
     },
   });
+  // Notify the new assignee when the ticket is reassigned.
+  if (data.assigneeId && data.assigneeId !== existing.assigneeId && data.assigneeId !== ctx.userId) {
+    await notifyUser({
+      workspaceId: ctx.workspaceId,
+      userId: data.assigneeId,
+      type: "ticket.assigned",
+      title: `Ticket assigned to you: ${data.subject}`,
+      href: `/app/helpdesk/tickets/${id}`,
+      meta: { ticketId: id },
+    });
+  }
   revalidatePath(`/app/helpdesk/tickets/${id}`);
   revalidatePath("/app/helpdesk/tickets");
   return { ok: true };

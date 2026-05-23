@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/session";
 import { assertCan } from "@/platform/permissions";
 import { formSchema, fieldDefSchema, buildSubmissionSchema, type FieldDef } from "@/modules/forms/schemas";
 import { LifecycleStage } from "@prisma/client";
+import { assertWithinPlanLimit, PlanLimitError } from "@/modules/billing/limits";
 
 function parseFieldsFromFd(fd: FormData): FieldDef[] {
   const ids = fd.getAll("f_id").map(String);
@@ -38,6 +39,12 @@ function parseFieldsFromFd(fd: FormData): FieldDef[] {
 export async function createFormAction(fd: FormData) {
   const ctx = await requireSession();
   assertCan(ctx.role, "form", "create");
+  try {
+    await assertWithinPlanLimit(ctx.workspaceId, "forms");
+  } catch (err) {
+    if (err instanceof PlanLimitError) return { error: err.message };
+    throw err;
+  }
   const fields = parseFieldsFromFd(fd);
   const parsed = formSchema.safeParse({
     name: fd.get("name") ?? "",

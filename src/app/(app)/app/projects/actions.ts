@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import { assertCan } from "@/platform/permissions";
 import { projectSchema } from "@/modules/projects/schemas";
+import { assertWithinPlanLimit, PlanLimitError } from "@/modules/billing/limits";
 
 function fdToObj(fd: FormData) {
   return {
@@ -22,6 +23,12 @@ function fdToObj(fd: FormData) {
 export async function createProjectAction(fd: FormData) {
   const ctx = await requireSession();
   assertCan(ctx.role, "project", "create");
+  try {
+    await assertWithinPlanLimit(ctx.workspaceId, "projects");
+  } catch (err) {
+    if (err instanceof PlanLimitError) return { error: err.message };
+    throw err;
+  }
   const parsed = projectSchema.safeParse(fdToObj(fd));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const data = parsed.data;

@@ -7,6 +7,8 @@ import { requireSession } from "@/lib/session";
 import { assertCan } from "@/platform/permissions";
 import { dealSchema, dealStatusSchema } from "@/modules/sales/schemas";
 import { DealStatus } from "@prisma/client";
+import { assertWithinPlanLimit, PlanLimitError } from "@/modules/billing/limits";
+import { notifyUser } from "@/modules/notifications/notify";
 
 function fdToObj(fd: FormData) {
   return {
@@ -33,6 +35,12 @@ async function assertStageInPipeline(workspaceId: string, pipelineId: string, st
 export async function createDealAction(fd: FormData) {
   const ctx = await requireSession();
   assertCan(ctx.role, "deal", "create");
+  try {
+    await assertWithinPlanLimit(ctx.workspaceId, "deals");
+  } catch (err) {
+    if (err instanceof PlanLimitError) return { error: err.message };
+    throw err;
+  }
   const parsed = dealSchema.safeParse(fdToObj(fd));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const data = parsed.data;
@@ -76,7 +84,7 @@ export async function updateDealAction(id: string, fd: FormData) {
 
   const existing = await prisma.deal.findFirst({
     where: { id, workspaceId: ctx.workspaceId },
-    select: { id: true },
+    select: { id: true, ownerId: true, name: true },
   });
   if (!existing) return { error: "Not found" };
 
@@ -105,6 +113,17 @@ export async function updateDealAction(id: string, fd: FormData) {
       resourceId: id,
     },
   });
+  // Notify the new owner if the deal was reassigned.
+  if (data.ownerId && data.ownerId !== existing.ownerId && data.ownerId !== ctx.userId) {
+    await notifyUser({
+      workspaceId: ctx.workspaceId,
+      userId: data.ownerId,
+      type: "deal.updated",
+      title: `Deal assigned to you: ${data.name}`,
+      href: `/app/sales/deals/${id}`,
+      meta: { dealId: id },
+    });
+  }
   revalidatePath(`/app/sales/deals/${id}`);
   revalidatePath("/app/sales/deals");
   revalidatePath("/app/sales/pipeline");
@@ -117,7 +136,7 @@ export async function moveDealStageAction(input: { dealId: string; stageId: stri
 
   const deal = await prisma.deal.findFirst({
     where: { id: input.dealId, workspaceId: ctx.workspaceId },
-    select: { id: true, pipelineId: true, stageId: true },
+    select: { id: true, pipelineId: true, stageId: true, ownerId: true, name: true },
   });
   if (!deal) return { error: "Deal not found" };
   if (deal.stageId === input.stageId) return { ok: true };
@@ -138,6 +157,17 @@ export async function moveDealStageAction(input: { dealId: string; stageId: stri
       diff: { from: deal.stageId, to: input.stageId },
     },
   });
+  // Notify the deal owner when someone else moves the stage.
+  if (deal.ownerId && deal.ownerId !== ctx.userId) {
+    await notifyUser({
+      workspaceId: ctx.workspaceId,
+      userId: deal.ownerId,
+      type: "deal.updated",
+      title: `Deal stage changed: ${deal.name}`,
+      href: `/app/sales/deals/${deal.id}`,
+      meta: { dealId: deal.id, fromStage: deal.stageId, toStage: input.stageId },
+    });
+  }
   revalidatePath("/app/sales/pipeline");
   revalidatePath(`/app/sales/deals/${deal.id}`);
   return { ok: true };

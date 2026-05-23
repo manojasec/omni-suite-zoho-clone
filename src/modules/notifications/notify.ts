@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export const NOTIFICATION_TYPES = [
   "task.assigned",
@@ -30,7 +31,7 @@ export async function notifyUser(input: {
       title: input.title,
       body: input.body,
       href: input.href,
-      meta: input.meta as object | undefined,
+      meta: (input.meta ?? Prisma.JsonNull) as Prisma.InputJsonValue,
     },
   });
 }
@@ -56,7 +57,7 @@ export async function notifyUsers(input: {
       title: input.title,
       body: input.body,
       href: input.href,
-      meta: input.meta as object | undefined,
+      meta: (input.meta ?? Prisma.JsonNull) as Prisma.InputJsonValue,
     })),
   });
 }
